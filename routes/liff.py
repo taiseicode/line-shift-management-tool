@@ -42,27 +42,26 @@ def liff_submit():
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root {{
-      --app-bg: #f3f6fb;
-      --panel-bg: rgba(255, 255, 255, 0.94);
+      --app-bg: #f5f7fb;
+      --panel-bg: #ffffff;
       --panel-border: rgba(15, 23, 42, 0.08);
-      --panel-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+      --panel-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
       --text-main: #18212f;
-      --text-sub: #607086;
+      --text-sub: #69768a;
       --line-soft: rgba(96, 112, 134, 0.18);
-      --brand: #1f5eff;
-      --brand-soft: rgba(31, 94, 255, 0.12);
+      --brand: #2f6fdd;
+      --brand-soft: rgba(47, 111, 221, 0.10);
       --off-soft: rgba(100, 116, 139, 0.14);
-      --danger-soft: rgba(209, 67, 67, 0.12);
-      --radius-xl: 24px;
-      --radius-lg: 18px;
-      --radius-md: 14px;
+      --danger-soft: rgba(209, 67, 67, 0.09);
+      --radius-xl: 18px;
+      --radius-lg: 14px;
+      --radius-md: 10px;
     }}
     body {{
-      background:
-        radial-gradient(circle at top left, rgba(31, 94, 255, 0.10), transparent 34%),
-        linear-gradient(180deg, #f8fbff 0%, var(--app-bg) 100%);
+      background: var(--app-bg);
       color: var(--text-main);
       min-height: 100vh;
+      font-size: 0.94rem;
     }}
     .liff-shell {{
       max-width: 720px;
@@ -73,26 +72,20 @@ def liff_submit():
       background: var(--panel-bg);
       border: 1px solid var(--panel-border);
       box-shadow: var(--panel-shadow);
-      backdrop-filter: blur(14px);
     }}
     .hero-panel {{
       border-radius: var(--radius-xl);
-      padding: 22px 20px 18px;
-      margin-bottom: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
     }}
     .hero-eyebrow {{
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      font-weight: 700;
-      color: var(--brand);
-      margin-bottom: 6px;
+      display: none;
     }}
     .hero-title {{
-      font-size: 1.5rem;
-      font-weight: 700;
+      font-size: 1.22rem;
+      font-weight: 800;
       margin: 0;
-      letter-spacing: -0.02em;
+      letter-spacing: 0;
     }}
     .hero-sub,
     .range-text,
@@ -100,61 +93,68 @@ def liff_submit():
       color: var(--text-sub);
     }}
     .hero-sub {{
-      font-size: 0.95rem;
-      line-height: 1.6;
-      margin-top: 8px;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      margin-top: 5px;
       margin-bottom: 0;
     }}
+    .staff-name {{
+      color: var(--text-sub);
+      font-size: 0.78rem;
+      margin-top: 6px;
+    }}
     .range-text {{
-      font-size: 0.96rem;
-      font-weight: 600;
-      margin-top: 12px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      margin-top: 8px;
     }}
     .top-action,
     .week-nav .btn {{
-      min-height: 48px;
-      border-radius: 14px;
+      min-height: 40px;
+      border-radius: 12px;
       font-weight: 600;
       border-width: 1px;
     }}
     .top-action {{
-      min-width: 84px;
+      min-width: 42px;
+      min-height: 36px;
+      padding: 0 12px;
     }}
     .week-nav {{
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 16px;
+      gap: 8px;
+      margin-top: 12px;
     }}
     .guide-card {{
       border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      margin-bottom: 14px;
+      padding: 12px 13px;
+      margin-bottom: 10px;
     }}
     .guide-title {{
-      font-size: 0.92rem;
-      font-weight: 700;
-      margin-bottom: 4px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      margin-bottom: 3px;
     }}
     .submission-wrap .alert {{
       border: 0;
-      border-radius: 16px;
-      padding: 14px 16px;
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+      border-radius: 12px;
+      padding: 9px 11px;
+      box-shadow: none;
+      font-size: 0.82rem;
     }}
     .shift-list {{
       display: grid;
-      gap: 12px;
+      gap: 9px;
     }}
     .shift-card {{
       width: 100%;
       border: 1px solid var(--panel-border);
       border-radius: var(--radius-lg);
-      background: rgba(255, 255, 255, 0.97);
-      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+      background: #fff;
+      box-shadow: var(--panel-shadow);
       padding: 0;
       overflow: hidden;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
     }}
     .shift-card:disabled {{
       cursor: not-allowed;
@@ -163,40 +163,39 @@ def liff_submit():
       transform: scale(0.995);
     }}
     .shift-card:not(:disabled):hover {{
-      border-color: rgba(31, 94, 255, 0.28);
-      box-shadow: 0 20px 36px rgba(15, 23, 42, 0.10);
+      border-color: rgba(47, 111, 221, 0.24);
     }}
     .shift-card-inner {{
-      padding: 16px 16px 15px;
+      padding: 12px 13px;
       text-align: left;
     }}
     .shift-card-header {{
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 8px;
+      margin-bottom: 8px;
     }}
     .shift-date {{
-      font-size: 1.04rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+      font-size: 0.98rem;
+      font-weight: 800;
+      letter-spacing: 0;
       color: var(--text-main);
     }}
     .shift-date-sub {{
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       color: var(--text-sub);
-      margin-top: 3px;
+      margin-top: 1px;
     }}
     .shift-status-tag {{
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 72px;
-      min-height: 30px;
-      padding: 0 12px;
+      min-width: 58px;
+      min-height: 24px;
+      padding: 0 9px;
       border-radius: 999px;
-      font-size: 0.76rem;
+      font-size: 0.7rem;
       font-weight: 700;
       border: 1px solid transparent;
       flex-shrink: 0;
@@ -212,9 +211,9 @@ def liff_submit():
       border-color: rgba(100, 116, 139, 0.2);
     }}
     .tag-work {{
-      color: #0f4cc9;
+      color: #1554b7;
       background: var(--brand-soft);
-      border-color: rgba(31, 94, 255, 0.18);
+      border-color: rgba(47, 111, 221, 0.16);
     }}
     .tag-closed {{
       color: #9f2d2d;
@@ -222,13 +221,11 @@ def liff_submit():
       border-color: rgba(209, 67, 67, 0.18);
     }}
     .shift-user-row {{
-      font-size: 0.84rem;
-      color: var(--text-sub);
-      margin-bottom: 10px;
+      display: none;
     }}
     .shift-state {{
-      border-radius: 16px;
-      padding: 14px 14px 12px;
+      border-radius: 12px;
+      padding: 9px 10px;
       border: 1px solid transparent;
     }}
     .state-empty {{
@@ -249,23 +246,24 @@ def liff_submit():
     }}
     .shift-state-label {{
       display: block;
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
+      letter-spacing: 0;
+      margin-bottom: 2px;
     }}
     .shift-state-detail {{
-      font-size: 0.98rem;
+      font-size: 0.88rem;
       font-weight: 700;
-      letter-spacing: -0.01em;
+      letter-spacing: 0;
     }}
     .deadline-note {{
-      margin-top: 10px;
-      font-size: 0.82rem;
-      line-height: 1.5;
-      padding: 10px 12px;
-      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      padding: 4px 8px;
+      border-radius: 999px;
       border: 1px solid transparent;
     }}
     .note-open {{
@@ -279,7 +277,7 @@ def liff_submit():
       border-color: rgba(209, 67, 67, 0.16);
     }}
     .shift-closed {{
-      opacity: 0.72;
+      opacity: 0.62;
       box-shadow: none;
     }}
     .modal-dialog {{
@@ -308,52 +306,53 @@ def liff_submit():
       font-weight: 700;
     }}
     .btn-group > .btn {{
-      min-height: 48px;
+      min-height: 42px;
       font-weight: 600;
     }}
     .form-select,
     .form-control {{
-      min-height: 48px;
-      border-radius: 14px;
+      min-height: 42px;
+      border-radius: 12px;
       border-color: rgba(96, 112, 134, 0.22);
     }}
     .action-row {{
       display: flex;
-      gap: 10px;
-      margin-top: 18px;
+      gap: 8px;
+      margin-top: 14px;
     }}
     .action-row .btn {{
-      min-height: 48px;
-      border-radius: 14px;
+      min-height: 42px;
+      border-radius: 12px;
       font-weight: 700;
     }}
     .liff-tabs {{
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 0 0 14px;
+      gap: 6px;
+      margin: 0 0 10px;
     }}
     .liff-tab-btn {{
-      min-height: 46px;
-      border-radius: 14px;
+      min-height: 38px;
+      border-radius: 12px;
       border: 1px solid rgba(96, 112, 134, 0.22);
       background: rgba(255, 255, 255, 0.88);
       color: var(--text-sub);
       font-weight: 700;
+      font-size: 0.86rem;
     }}
     .liff-tab-btn.active {{
       color: #fff;
       background: var(--brand);
       border-color: var(--brand);
-      box-shadow: 0 10px 22px rgba(31, 94, 255, 0.20);
+      box-shadow: none;
     }}
     .tab-panel[hidden] {{ display: none !important; }}
     .confirmed-list {{ display: grid; gap: 10px; }}
     .confirmed-card {{
       border: 1px solid rgba(96, 112, 134, 0.14);
-      border-radius: 16px;
+      border-radius: 12px;
       background: rgba(248, 250, 252, 0.9);
-      padding: 13px 14px;
+      padding: 10px 11px;
     }}
     .confirmed-card.confirmed {{
       background: rgba(34, 197, 94, 0.10);
@@ -375,14 +374,14 @@ def liff_submit():
     .pay-summary-grid {{
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 12px;
+      gap: 8px;
+      margin-top: 10px;
     }}
     .pay-summary-item {{
       border: 1px solid rgba(96, 112, 134, 0.14);
-      border-radius: 14px;
+      border-radius: 12px;
       background: rgba(248, 250, 252, 0.88);
-      padding: 10px 12px;
+      padding: 8px 10px;
     }}
     .pay-summary-label {{
       font-size: 0.74rem;
@@ -391,7 +390,7 @@ def liff_submit():
       margin-bottom: 3px;
     }}
     .pay-summary-value {{ font-size: 0.98rem; font-weight: 700; }}
-    .pay-amount {{ font-size: 1.55rem; font-weight: 800; letter-spacing: -0.01em; }}
+    .pay-amount {{ font-size: 1.4rem; font-weight: 800; letter-spacing: 0; }}
     @media (max-width: 575.98px) {{
       .hero-panel {{
         padding: 18px 16px 16px;
@@ -419,12 +418,13 @@ def liff_submit():
   <div class="hero-panel">
     <div class="d-flex align-items-start justify-content-between gap-3">
       <div class="flex-grow-1">
-        <div class="hero-eyebrow">Shift Submission</div>
-        <h4 class="hero-title">シフト提出</h4>
-        <p class="hero-sub">1週間分のシフトを入力してください</p>
+        <div class="hero-eyebrow"></div>
+        <h4 class="hero-title">今週のシフト</h4>
+        <p class="hero-sub">出勤できる日と時間を入力してください</p>
+        <div class="staff-name" id="staffNameText"></div>
         <div class="range-text" id="rangeText"></div>
       </div>
-      <button id="btnClose" class="btn btn-outline-secondary top-action">閉じる</button>
+      <button id="btnClose" class="btn btn-outline-secondary top-action" aria-label="閉じる">×</button>
     </div>
     <div class="week-nav">
       <button type="button" id="btnPrevWeek" class="btn btn-outline-secondary">前の週</button>
@@ -439,8 +439,7 @@ def liff_submit():
 
   <div id="submitTabPanel" class="tab-panel">
     <div class="guide-card">
-      <div class="guide-title">使い方</div>
-      <div class="section-note small">出勤 / 休みを選び、必要な日の時間を入力してください。</div>
+      <div class="section-note small">出勤できる日を選び、時間を入力してください。</div>
     </div>
     <div class="submission-wrap mb-3">{submission_message_html}</div>
     <div id="list" class="shift-list"></div>
@@ -657,6 +656,10 @@ function dateToYmdLocal(dateObj) {{
   return `${{dateObj.getFullYear()}}-${{pad2(dateObj.getMonth() + 1)}}-${{pad2(dateObj.getDate())}}`;
 }}
 
+function ymdToSlash(ymd) {{
+  return String(ymd || "").replaceAll("-", "/");
+}}
+
 function normalizeWeekStart(startYmd) {{
   const dateObj = ymdToDateLocal(startYmd);
   if (!dateObj) return "";
@@ -732,10 +735,10 @@ function getEntryStateMeta(entry, status) {{
   if (status && status.is_closed) {{
     return {{
       tagClass: "tag-closed",
-      tagText: "締切超過",
+      tagText: "締切済",
       stateClass: "state-closed",
-      label: "受付終了",
-      detail: "提出期限を過ぎています"
+      label: "変更不可",
+      detail: "受付終了"
     }};
   }}
   if (!entry) {{
@@ -744,7 +747,7 @@ function getEntryStateMeta(entry, status) {{
       tagText: "未入力",
       stateClass: "state-empty",
       label: "未入力",
-      detail: "まだ勤務予定が登録されていません"
+      detail: "出勤または休みを選択"
     }};
   }}
   if (entry.off) {{
@@ -753,14 +756,14 @@ function getEntryStateMeta(entry, status) {{
       tagText: "休み",
       stateClass: "state-off",
       label: "休み",
-      detail: "この日はお休みで提出済みです"
+      detail: "提出済み"
     }};
   }}
   return {{
     tagClass: "tag-work",
     tagText: "出勤",
     stateClass: "state-work",
-    label: "勤務時間",
+    label: "出勤",
     detail: `${{entry.start_time}} - ${{entry.end_time}}`
   }};
 }}
@@ -783,7 +786,7 @@ function badgeHtml(entry, status) {{
 function deadlineStatusHtml(status) {{
   if (!status) return "";
   if (status.is_closed) {{
-    return `<div class="deadline-note note-closed">提出期限を過ぎています</div>`;
+    return `<div class="deadline-note note-closed">締切済</div>`;
   }}
   if (status.deadline_display) {{
     return `<div class="deadline-note note-open">締切: ${{status.deadline_display}}</div>`;
@@ -793,7 +796,7 @@ function deadlineStatusHtml(status) {{
 
 function availabilityNoteHtml(ymd, status) {{
   if (isPastDateYmd(ymd)) {{
-    return `<div class="deadline-note note-closed">過去日は変更できません</div>`;
+    return `<div class="deadline-note note-closed">変更不可</div>`;
   }}
   return deadlineStatusHtml(status);
 }}
@@ -863,7 +866,7 @@ function renderWeek(startYmd) {{
     return;
   }}
 
-  rangeText.textContent = `${{weekDates[0]}} - ${{weekDates[6]}}`;
+  rangeText.textContent = `${{ymdToSlash(weekDates[0])}} - ${{ymdToSlash(weekDates[6])}}`;
 
   for (const ymd of weekDates) {{
     const entry = entries[ymd] || null;
@@ -886,11 +889,10 @@ function renderWeek(startYmd) {{
         <div class="shift-card-header">
           <div>
             <div class="shift-date">${{ymdToLabel(ymd)}}</div>
-            <div class="shift-date-sub">${{ymd}}</div>
+            <div class="shift-date-sub">${{ymdToSlash(ymd)}}</div>
           </div>
           ${{statusTagHtml(entry, status)}}
         </div>
-        <div class="shift-user-row">ユーザー: ${{DISPLAY_NAME || "未設定"}}</div>
         ${{badgeHtml(entry, status)}}
         ${{availabilityNoteHtml(ymd, status)}}
       </div>
@@ -915,6 +917,13 @@ function setActiveTab(tabName) {{
 function confirmedRange() {{
   const start = normalizeWeekStartToSunday(currentWeekStart) || normalizeWeekStartToSunday(START) || dateToYmdLocal(getSundayOfWeek(new Date()));
   return {{ start, end: addDaysToYmd(start, 13) }};
+}}
+
+function updateStaffNameText() {{
+  const el = document.getElementById("staffNameText");
+  if (!el) return;
+  const name = DISPLAY_NAME && DISPLAY_NAME !== "未設定" && DISPLAY_NAME !== "読み込み中..." ? DISPLAY_NAME : "";
+  el.textContent = name ? `${{name}}さんのシフト` : "";
 }}
 
 function currentConfirmedWeekStart() {{
@@ -1461,6 +1470,7 @@ async function loadWeek(startYmd) {{
 async function main() {{
   ID_TOKEN = "";
   DISPLAY_NAME = "読み込み中...";
+  updateStaffNameText();
   entries = {{}};
   deadlineStatuses = {{}};
   currentWeekStart = normalizeWeekStartToSunday(START) || dateToYmdLocal(getSundayOfWeek(new Date()));
@@ -1508,6 +1518,7 @@ async function main() {{
     }}
     if (decodedToken && decodedToken.name) {{
       DISPLAY_NAME = decodedToken.name;
+      updateStaffNameText();
     }}
     debugLog("decodedIDToken確認", {{
       tokenAvailable: decodedTokenAvailable,
@@ -1528,6 +1539,7 @@ async function main() {{
     }}
     if (DISPLAY_NAME === "未設定" && profile && profile.displayName) {{
       DISPLAY_NAME = profile.displayName;
+      updateStaffNameText();
     }}
   }} catch (e) {{
     profileStatus = "failed";
@@ -1543,6 +1555,7 @@ async function main() {{
     lineUserId: LINE_USER_ID || "",
     displayName: DISPLAY_NAME
   }});
+  updateStaffNameText();
 
   const times = buildTimes(15);
   fillSelectOptions(document.getElementById("startTime"), times);
