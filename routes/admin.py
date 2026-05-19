@@ -1709,7 +1709,7 @@ def admin_home_content():
       <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
         <div>
           <h5 class="card-title mb-1">人件費集計</h5>
-          <div class="text-muted small">既存の管理画面はそのままに、日別・月別の集計結果だけを追加表示します。</div>
+          <div class="text-muted small">確定シフトをもとに、日別・月別の概算人件費を確認できます。</div>
         </div>
       </div>
 
@@ -1720,10 +1720,10 @@ def admin_home_content():
         <div class="col-md-4">
           <label class="form-label">時給設定</label>
           <input type="number" class="form-control" name="hourly_wage" min="0" value="{current_hourly_wage}">
-          <div class="form-text">settings.hourly_wage に保存します。未設定時は {DEFAULT_HOURLY_WAGE} 円です。</div>
+          <div class="form-text">人件費集計で使う基本時給です。未設定時は {DEFAULT_HOURLY_WAGE} 円で計算します。</div>
         </div>
         <div class="col-md-3 d-flex align-items-end">
-          <button type="submit" class="btn btn-outline-primary w-100">時給を保存</button>
+          <button type="submit" class="btn btn-outline-primary w-100">人件費設定を保存</button>
         </div>
       </form>
 

@@ -6,7 +6,7 @@
 <div class="card page-hero">
   <div class="card-body p-4">
     <h1 class="h3 mb-2">シフト提出期限</h1>
-    <div class="muted-note">既存の提出期限設定を独立ページに表示しています。POST ルートは既存のまま利用しています。</div>
+    <div class="muted-note">スタッフがシフトを提出できる締切ルールを設定できます。固定日時・相対期限・月固定締切を選択できます。</div>
   </div>
 </div>
 
@@ -16,7 +16,7 @@
       <div class="card-body">
         <div class="text-muted small">現在の方式</div>
         <div class="fs-5 fw-semibold">{{ submission_status_text }}</div>
-        <div class="muted-note mt-2">表示ルール: {{ active_deadline_config["display"] }}</div>
+        <div class="muted-note mt-2">現在のルール: {{ active_deadline_config["display"] }}</div>
       </div>
     </div>
   </div>
@@ -61,9 +61,9 @@
         </div>
         <div class="mt-3">
           <button type="submit" class="btn btn-outline-primary" formaction="/admin/update_deadline_mode">
-            この方式で保存
+            締切方式を保存
           </button>
-          <div class="form-text">詳細値は変更せず、選択中の締切方式だけを保存します。未設定を保存すると提出期限チェックは無効になります。</div>
+          <div class="form-text">選択した締切方式を反映します。未設定にすると締切なしで提出できます。</div>
         </div>
       </div>
 
@@ -112,12 +112,12 @@
       </div>
 
       <div class="col-md-2 d-flex align-items-end">
-        <button type="submit" class="btn btn-primary w-100">保存</button>
+        <button type="submit" class="btn btn-primary w-100">保存する</button>
       </div>
 
       <div class="col-12">
         <div class="form-text">
-          固定日時方式は全日共通の締切です。相対期限方式は「提出対象日から N 日前の HH:MM」を締切にします。月固定締切方式は「毎月指定日 HH:MM までに当月/翌月シフトを提出」として扱います。
+          固定日時は全日共通の締切です。相対期限は各シフト日の何日前までに提出するかを指定します。月固定締切は毎月決まった日付・時刻を締切にできます。
         </div>
       </div>
     </form>

@@ -6,7 +6,7 @@
 <div class="card page-hero">
   <div class="card-body p-4">
     <h1 class="h3 mb-2">概算人件費集計</h1>
-    <div class="muted-note">確定シフトを基準に、休憩・時間外労働・深夜手当をON/OFFして概算人件費を確認できます。</div>
+    <div class="muted-note">確定シフトをもとに、日別・月別の概算人件費を確認できます。休憩・時間外労働・深夜手当の設定を反映できます。</div>
   </div>
 </div>
 
@@ -20,7 +20,7 @@
       <div class="col-md-4">
         <label class="form-label">基本時給</label>
         <input type="number" class="form-control" name="base_hourly_wage" min="0" value="{{ labor_settings.base_hourly_wage }}">
-        <div class="form-text">settings.BASE_HOURLY_WAGE に保存します。</div>
+        <div class="form-text">人件費集計で使う基本時給です。</div>
       </div>
       <div class="col-md-8">
         <label class="form-label d-block">概算ルール</label>
@@ -49,7 +49,7 @@
         </div>
       </div>
       <div class="col-md-3 d-flex align-items-end">
-        <button type="submit" class="btn btn-outline-primary w-100">設定を保存</button>
+        <button type="submit" class="btn btn-outline-primary w-100">人件費設定を保存</button>
       </div>
     </form>
   </div>
@@ -65,10 +65,10 @@
             <input type="date" class="form-control" id="dailySummaryDate" value="{{ start_value }}">
           </div>
           <div class="col-sm-4">
-            <button type="button" class="btn btn-dark w-100" id="loadDailySummaryBtn">日別集計</button>
+            <button type="button" class="btn btn-dark w-100" id="loadDailySummaryBtn">表示する</button>
           </div>
         </div>
-        <div id="dailySummaryResult" class="mt-3 small text-muted">日付を選んで集計してください。</div>
+        <div id="dailySummaryResult" class="mt-3 small text-muted">日付を選ぶと集計結果を確認できます。</div>
       </div>
     </div>
   </div>
@@ -81,10 +81,10 @@
             <input type="month" class="form-control" id="monthlySummaryMonth" value="{{ current_month_value }}">
           </div>
           <div class="col-sm-4">
-            <button type="button" class="btn btn-dark w-100" id="loadMonthlySummaryBtn">月別集計</button>
+            <button type="button" class="btn btn-dark w-100" id="loadMonthlySummaryBtn">表示する</button>
           </div>
         </div>
-        <div id="monthlySummaryResult" class="mt-3 small text-muted">年月を選んで集計してください。</div>
+        <div id="monthlySummaryResult" class="mt-3 small text-muted">年月を選ぶと集計結果を確認できます。</div>
       </div>
     </div>
   </div>

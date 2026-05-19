@@ -48,7 +48,8 @@
 <div class="card page-hero">
   <div class="card-body p-4">
     <h1 class="h3 mb-2">今日の運営状況</h1>
-    <div class="muted-note">{{ today_date_label }}</div>
+    <div class="muted-note">本日の確定シフト・人件費・勤務時間を確認できます。</div>
+    <div class="text-muted small mt-2">{{ today_date_label }}</div>
   </div>
 </div>
 
@@ -92,8 +93,8 @@
         <div class="muted-note">{{ today_date_label }} の確定シフトを閲覧専用で表示しています。</div>
       </div>
       <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-outline-primary" href="{{ confirm_today_url }}">確定シフト管理へ</a>
-        <a class="btn btn-outline-dark" href="{{ daily_shift_url }}">1日シフト表へ</a>
+        <a class="btn btn-outline-primary" href="{{ confirm_today_url }}">確定シフトを編集</a>
+        <a class="btn btn-outline-dark" href="{{ daily_shift_url }}">1日シフト表を開く</a>
       </div>
     </div>
 

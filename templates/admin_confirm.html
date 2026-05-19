@@ -6,7 +6,7 @@
 <div class="card page-hero">
   <div class="card-body p-4">
     <h1 class="h3 mb-2">&#x78BA;&#x5B9A;&#x30B7;&#x30D5;&#x30C8;&#x7BA1;&#x7406;</h1>
-    <div class="muted-note">&#x72B6;&#x614B;&#x306F;&#x300C;&#x51FA;&#x52E4;&#x300D;&#x300C;&#x4F11;&#x307F;&#x300D;&#x306E;2&#x62E9;&#x3067;&#x7BA1;&#x7406;&#x3057;&#x307E;&#x3059;&#x3002;</div>
+    <div class="muted-note">スタッフの出勤・休みを確定できます。提出されたシフトを確認し、最終的な勤務予定を登録します。</div>
   </div>
 </div>
 
@@ -28,7 +28,7 @@
         <button type="button" class="btn btn-outline-dark w-100" onclick="shiftTargetDate('confirmDateInput', 'confirmDateForm', 1)">&#x6B21;&#x306E;&#x65E5;</button>
       </div>
       <div class="col-md-3 d-flex align-items-end">
-        <button type="submit" class="btn btn-outline-dark w-100">&#x8868;&#x793A;</button>
+        <button type="submit" class="btn btn-outline-dark w-100">表示する</button>
       </div>
     </form>
   </div>
@@ -117,7 +117,7 @@
               <input class="form-check-input" type="checkbox" value="1" id="saveUnsubmittedAsRest" name="save_unsubmitted_as_rest">
               <label class="form-check-label" for="saveUnsubmittedAsRest">未提出者を休みとして保存する</label>
             </div>
-            <button type="submit" class="btn btn-primary">&#x4FDD;&#x5B58;</button>
+            <button type="submit" class="btn btn-primary">保存する</button>
           </div>
         </form>
       </div>
@@ -162,7 +162,7 @@
                             {% endfor %}
                           </select>
                         </div>
-                        <div class="col-md-2 d-grid"><button type="submit" class="btn btn-sm btn-outline-primary">&#x66F4;&#x65B0;</button></div>
+                        <div class="col-md-2 d-grid"><button type="submit" class="btn btn-sm btn-outline-primary">更新する</button></div>
                       </form>
                     </td>
                     <td>
@@ -198,8 +198,8 @@
       <div class="col-md-4"><label class="form-label">&#x7D42;&#x4E86;&#x65E5;</label><input type="date" class="form-control" name="end" id="confirmRangeEndInput" value="{{ end_value }}"></div>
       <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
       <input type="hidden" name="sort" value="{{ confirm_sort }}">
-      <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-dark w-100">&#x8868;&#x793A;</button></div>
-      <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-dark w-100" id="confirmSevenDaysLink" href="/admin/confirm?sort={{ confirm_sort }}">&#x4ECA;&#x65E5;&#x304B;&#x3089;7&#x65E5;</a></div>
+      <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-dark w-100">表示する</button></div>
+      <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-dark w-100" id="confirmSevenDaysLink" href="/admin/confirm?sort={{ confirm_sort }}">今日から7日間</a></div>
       <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-primary w-100" id="confirmCurrentMonthLink" href="/admin/confirm?start={{ current_month_start_value }}&end={{ current_month_end_value }}&confirm_date={{ confirm_date_value }}&sort={{ confirm_sort }}">&#x4ECA;&#x6708;</a></div>
       <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-primary w-100" id="confirmNextMonthLink" href="/admin/confirm?start={{ next_month_start_value }}&end={{ next_month_end_value }}&confirm_date={{ confirm_date_value }}&sort={{ confirm_sort }}">&#x6765;&#x6708;</a></div>
       <div class="col-md-4 d-flex align-items-end"><a class="btn btn-success w-100" href="/admin/export_confirmed?start={{ start_value }}&end={{ end_value }}">Excel&#x51FA;&#x529B;</a></div>

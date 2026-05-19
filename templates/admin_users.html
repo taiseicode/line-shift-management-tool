@@ -6,7 +6,7 @@
 <div class="card page-hero">
   <div class="card-body p-4">
     <h1 class="h3 mb-2">登録ユーザー一覧</h1>
-    <div class="muted-note">既存のユーザー管理機能をそのまま使いながら、一覧画面だけを独立させています。</div>
+    <div class="muted-note">登録済みスタッフの確認・管理ができます。名前変更や表示順の変更、無効化ができます。</div>
   </div>
 </div>
 
@@ -14,8 +14,8 @@
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
       <div>
-        <h2 class="h5 mb-1">有効ユーザー</h2>
-        <div class="muted-note">名前変更と無効化ができます。既存データは削除しません。</div>
+        <h2 class="h5 mb-1">有効スタッフ</h2>
+        <div class="muted-note">勤務表に表示するスタッフを管理できます。</div>
       </div>
     </div>
 
@@ -72,7 +72,7 @@
                       <input type="hidden" name="next_page" value="/admin/users">
                       <input type="hidden" name="user_id" value="{{ user['id'] }}">
                       <input type="text" class="form-control form-control-sm" name="new_name" value="{{ user['name'] }}" placeholder="新しい名前">
-                      <button type="submit" class="btn btn-sm btn-outline-primary">更新</button>
+                      <button type="submit" class="btn btn-sm btn-outline-primary">名前を更新</button>
                     </form>
                   </div>
                 </td>
@@ -80,7 +80,7 @@
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="5" class="text-muted">有効ユーザーはいません。</td>
+              <td colspan="5" class="text-muted">有効なスタッフはいません。</td>
             </tr>
           {% endif %}
         </tbody>
@@ -92,7 +92,7 @@
 <div class="card page-card">
   <div class="card-body">
     <details open>
-      <summary class="fw-semibold mb-3">無効ユーザー</summary>
+      <summary class="fw-semibold mb-3">無効スタッフ</summary>
       <div class="table-responsive">
         <table class="table table-striped align-middle mb-0">
           <thead>
@@ -127,7 +127,7 @@
                         <input type="hidden" name="next_page" value="/admin/users">
                         <input type="hidden" name="user_id" value="{{ user['id'] }}">
                         <input type="text" class="form-control form-control-sm" name="new_name" value="{{ user['name'] }}" placeholder="新しい名前">
-                        <button type="submit" class="btn btn-sm btn-outline-primary">更新</button>
+                        <button type="submit" class="btn btn-sm btn-outline-primary">名前を更新</button>
                       </form>
                     </div>
                   </td>
@@ -135,7 +135,7 @@
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="4" class="text-muted">無効ユーザーはいません。</td>
+                <td colspan="4" class="text-muted">無効なスタッフはいません。</td>
               </tr>
             {% endif %}
           </tbody>
