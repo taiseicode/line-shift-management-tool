@@ -663,6 +663,28 @@ function normalizeWeekStart(startYmd) {{
   return dateToYmdLocal(dateObj);
 }}
 
+function getSundayOfWeek(dateObj) {{
+  const d = new Date(dateObj);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}}
+
+function normalizeWeekStartToSunday(startYmd) {{
+  const dateObj = ymdToDateLocal(startYmd);
+  if (!dateObj) return "";
+  return dateToYmdLocal(getSundayOfWeek(dateObj));
+}}
+
+function todayYmd() {{
+  return dateToYmdLocal(new Date());
+}}
+
+function isPastDateYmd(ymd) {{
+  const normalized = normalizeWeekStart(ymd);
+  return !!normalized && normalized < todayYmd();
+}}
+
 function addDaysToYmd(ymd, days) {{
   const normalized = normalizeWeekStart(ymd);
   if (!normalized) return "";
@@ -769,6 +791,13 @@ function deadlineStatusHtml(status) {{
   return `<div class="deadline-note note-open">提出可能</div>`;
 }}
 
+function availabilityNoteHtml(ymd, status) {{
+  if (isPastDateYmd(ymd)) {{
+    return `<div class="deadline-note note-closed">過去日は変更できません</div>`;
+  }}
+  return deadlineStatusHtml(status);
+}}
+
 function setError(msg) {{
   const el = document.getElementById("errText");
   if (!el) return;
@@ -798,7 +827,7 @@ function getDeadlineStatus(ymd) {{
 }}
 
 function shiftWeek(startYmd, diffWeeks) {{
-  const normalizedStart = normalizeWeekStart(startYmd);
+  const normalizedStart = normalizeWeekStartToSunday(startYmd);
   if (!normalizedStart) {{
     console.error("shiftWeek invalid start", {{ startYmd, diffWeeks }});
     return "";
@@ -811,17 +840,14 @@ function updateWeekNav() {{
   const nextBtn = document.getElementById("btnNextWeek");
   if (!prevBtn || !nextBtn) return;
 
-  const initialWeekStart = normalizeWeekStart(START) || START;
-  const normalizedCurrent = normalizeWeekStart(currentWeekStart) || initialWeekStart;
-
-  prevBtn.disabled = isLoadingWeek || normalizedCurrent === initialWeekStart;
+  prevBtn.disabled = isLoadingWeek;
   nextBtn.disabled = isLoadingWeek;
   prevBtn.textContent = "前の週";
   nextBtn.textContent = isLoadingWeek ? "読み込み中..." : "次の週";
 }}
 
 function renderWeek(startYmd) {{
-  const normalizedStart = normalizeWeekStart(startYmd);
+  const normalizedStart = normalizeWeekStartToSunday(startYmd);
   const weekDates = getWeekDates(normalizedStart);
   const list = document.getElementById("list");
   const rangeText = document.getElementById("rangeText");
@@ -842,6 +868,7 @@ function renderWeek(startYmd) {{
   for (const ymd of weekDates) {{
     const entry = entries[ymd] || null;
     const status = getDeadlineStatus(ymd);
+    const isPast = isPastDateYmd(ymd);
 
     const card = document.createElement("button");
     card.type = "button";
@@ -849,7 +876,7 @@ function renderWeek(startYmd) {{
     card.dataset.date = ymd;
     card.onclick = () => openModal(card.dataset.date);
 
-    if (status && status.is_closed) {{
+    if (isPast || (status && status.is_closed)) {{
       card.disabled = true;
       card.classList.add("shift-closed");
     }}
@@ -865,7 +892,7 @@ function renderWeek(startYmd) {{
         </div>
         <div class="shift-user-row">ユーザー: ${{DISPLAY_NAME || "未設定"}}</div>
         ${{badgeHtml(entry, status)}}
-        ${{deadlineStatusHtml(status)}}
+        ${{availabilityNoteHtml(ymd, status)}}
       </div>
     `;
     list.appendChild(card);
@@ -886,12 +913,12 @@ function setActiveTab(tabName) {{
 }}
 
 function confirmedRange() {{
-  const start = normalizeWeekStart(currentWeekStart) || normalizeWeekStart(START) || START;
+  const start = normalizeWeekStartToSunday(currentWeekStart) || normalizeWeekStartToSunday(START) || dateToYmdLocal(getSundayOfWeek(new Date()));
   return {{ start, end: addDaysToYmd(start, 13) }};
 }}
 
 function currentConfirmedWeekStart() {{
-  return normalizeWeekStart(currentWeekStart) || normalizeWeekStart(START) || START;
+  return normalizeWeekStartToSunday(currentWeekStart) || normalizeWeekStartToSunday(START) || dateToYmdLocal(getSundayOfWeek(new Date()));
 }}
 
 function resetConfirmedHistoryWeek() {{
@@ -1234,7 +1261,7 @@ async function loadConfirmedShifts(resetHistory = false) {{
 }}
 
 async function apiGetMyWeek(lineUserId, startYmd) {{
-  const normalizedStart = normalizeWeekStart(startYmd);
+  const normalizedStart = normalizeWeekStartToSunday(startYmd);
   if (!normalizedStart) {{
     console.error("apiGetMyWeek invalid start", {{ lineUserId, startYmd }});
     throw new Error("週開始日の形式が不正です");
@@ -1347,13 +1374,14 @@ async function apiDeleteDay(lineUserId, dateYmd) {{
 function openModal(ymd) {{
   currentDate = normalizeWeekStart(ymd);
   const status = getDeadlineStatus(currentDate);
+  const isPast = isPastDateYmd(currentDate);
 
-  setError(status && status.is_closed ? (status.message || "提出期限を過ぎています") : "");
+  setError(isPast ? "過去日は変更できません" : (status && status.is_closed ? (status.message || "提出期限を過ぎています") : ""));
 
   document.getElementById("modalTitle").textContent = `${{ymdToLabel(currentDate)}} の入力`;
   document.getElementById("modalSub").textContent = currentDate;
   document.getElementById("modalDeadlineText").textContent =
-    status && status.deadline_display ? `締切: ${{status.deadline_display}}` : "締切: 未設定";
+    isPast ? "過去日は変更できません" : (status && status.deadline_display ? `締切: ${{status.deadline_display}}` : "締切: 未設定");
 
   const entry = entries[currentDate] || null;
   const startSel = document.getElementById("startTime");
@@ -1376,8 +1404,13 @@ function openModal(ymd) {{
   }}
 
   toggleTimeBox();
-  document.getElementById("btnSave").disabled = !!(status && status.is_closed);
-  document.getElementById("btnDelete").disabled = !!(status && status.is_closed);
+  const disabled = isPast || !!(status && status.is_closed);
+  document.getElementById("modeWork").disabled = disabled;
+  document.getElementById("modeOff").disabled = disabled;
+  startSel.disabled = disabled;
+  endSel.disabled = disabled;
+  document.getElementById("btnSave").disabled = disabled;
+  document.getElementById("btnDelete").disabled = disabled;
   modal.show();
 }}
 
@@ -1387,7 +1420,7 @@ function toggleTimeBox() {{
 }}
 
 async function loadWeek(startYmd) {{
-  const normalizedStart = normalizeWeekStart(startYmd);
+  const normalizedStart = normalizeWeekStartToSunday(startYmd);
   if (!normalizedStart) {{
     console.error("loadWeek invalid start", {{ startYmd }});
     throw new Error("週開始日の形式が不正です");
@@ -1430,7 +1463,7 @@ async function main() {{
   DISPLAY_NAME = "読み込み中...";
   entries = {{}};
   deadlineStatuses = {{}};
-  currentWeekStart = normalizeWeekStart(START) || START;
+  currentWeekStart = normalizeWeekStartToSunday(START) || dateToYmdLocal(getSundayOfWeek(new Date()));
   renderWeek(currentWeekStart);
 
   try {{
@@ -1588,6 +1621,10 @@ async function main() {{
 
   document.getElementById("btnSave").onclick = async () => {{
     setError("");
+    if (isPastDateYmd(currentDate)) {{
+      setError("過去日は変更できません");
+      return;
+    }}
     const status = getDeadlineStatus(currentDate);
     if (status && status.is_closed) {{
       setError(status.message || "提出期限を過ぎています");
@@ -1630,6 +1667,10 @@ async function main() {{
 
   document.getElementById("btnDelete").onclick = async () => {{
     setError("");
+    if (isPastDateYmd(currentDate)) {{
+      setError("過去日は変更できません");
+      return;
+    }}
     const status = getDeadlineStatus(currentDate);
     if (status && status.is_closed) {{
       setError(status.message || "提出期限を過ぎています");

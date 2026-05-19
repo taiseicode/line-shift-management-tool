@@ -854,8 +854,14 @@ def api_save_day():
     end_time = data.get("end_time")
     name = ((data.get("name") or claims.get("name") or "未設定").strip() or "未設定")
 
-    if not parse_ymd(date_str):
+    shift_date_obj = parse_ymd(date_str)
+    if not shift_date_obj:
         return jsonify({"error": "date が不正です"}), 400
+    if shift_date_obj < datetime.now().date():
+        return jsonify({
+            "ok": False,
+            "error": "過去日は変更できません"
+        }), 403
 
     user = get_user_by_line_id(line_user_id)
     inactive_response = reject_if_user_inactive(user)
@@ -889,8 +895,6 @@ def api_save_day():
     rows = get_my_entries_range(user["id"], date_str, date_str)
     r = rows[0] if rows else None
     entry = None
-    shift_date_obj = parse_ymd(date_str)
-
     if r:
         entry = {
             "off": int(r["off"]) == 1,
@@ -912,8 +916,14 @@ def api_delete_day():
         return error_response
     line_user_id = (claims.get("sub") or "").strip()
     date_str = (data.get("date") or "").strip()
-    if not parse_ymd(date_str):
+    shift_date_obj = parse_ymd(date_str)
+    if not shift_date_obj:
         return jsonify({"error": "date が不正です"}), 400
+    if shift_date_obj < datetime.now().date():
+        return jsonify({
+            "ok": False,
+            "error": "過去日は変更できません"
+        }), 403
 
     user = get_user_by_line_id(line_user_id)
     inactive_response = reject_if_user_inactive(user)
@@ -929,7 +939,6 @@ def api_delete_day():
         return closed_response
 
     if not user:
-        shift_date_obj = parse_ymd(date_str)
         return jsonify({
             "ok": True,
             "deleted": 0,
@@ -937,7 +946,6 @@ def api_delete_day():
         })
 
     deleted = delete_entry(user["id"], date_str)
-    shift_date_obj = parse_ymd(date_str)
     return jsonify({
         "ok": True,
         "deleted": deleted,
