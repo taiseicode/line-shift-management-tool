@@ -1,0 +1,361 @@
+{% extends "admin_base.html" %}
+
+{% block title %}Confirmed Shifts | Admin{% endblock %}
+
+{% block content %}
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">&#x78BA;&#x5B9A;&#x30B7;&#x30D5;&#x30C8;&#x7BA1;&#x7406;</h1>
+    <div class="muted-note">&#x72B6;&#x614B;&#x306F;&#x300C;&#x51FA;&#x52E4;&#x300D;&#x300C;&#x4F11;&#x307F;&#x300D;&#x306E;2&#x62E9;&#x3067;&#x7BA1;&#x7406;&#x3057;&#x307E;&#x3059;&#x3002;</div>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">&#x5BFE;&#x8C61;&#x65E5;</h2>
+    <form method="GET" class="row g-3" id="confirmDateForm">
+      <input type="hidden" name="start" value="{{ start_value }}">
+      <input type="hidden" name="end" value="{{ end_value }}">
+      <input type="hidden" name="sort" value="{{ confirm_sort }}">
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-dark w-100" onclick="shiftTargetDate('confirmDateInput', 'confirmDateForm', -1)">&#x524D;&#x306E;&#x65E5;</button>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">&#x78BA;&#x5B9A;&#x30B7;&#x30D5;&#x30C8;&#x5BFE;&#x8C61;&#x65E5;</label>
+        <input type="date" class="form-control" name="confirm_date" id="confirmDateInput" value="{{ confirm_date_value }}">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-dark w-100" onclick="shiftTargetDate('confirmDateInput', 'confirmDateForm', 1)">&#x6B21;&#x306E;&#x65E5;</button>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-dark w-100">&#x8868;&#x793A;</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <h2 class="h5 mb-0">{{ confirm_date_value }} &#x63D0;&#x51FA;&#x30B7;&#x30D5;&#x30C8;</h2>
+          <div class="btn-group btn-group-sm" role="group" aria-label="表示順切り替え">
+            <a class="btn {% if confirm_sort == 'display' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="/admin/confirm?start={{ start_value }}&end={{ end_value }}&confirm_date={{ confirm_date_value }}&sort=display">表示順</a>
+            <a class="btn {% if confirm_sort == 'submitted' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="/admin/confirm?start={{ start_value }}&end={{ end_value }}&confirm_date={{ confirm_date_value }}&sort=submitted">提出順</a>
+          </div>
+        </div>
+        <form method="POST" action="/admin/save_confirmed_shifts_bulk">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+          <input type="hidden" name="start" value="{{ start_value }}">
+          <input type="hidden" name="end" value="{{ end_value }}">
+          <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
+          <input type="hidden" name="sort" value="{{ confirm_sort }}">
+          <input type="hidden" name="next_page" value="/admin/confirm">
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>&#x540D;&#x524D;</th>
+                  <th>&#x72B6;&#x614B;</th>
+                  <th>&#x63D0;&#x51FA;&#x5185;&#x5BB9;</th>
+                  <th>&#x78BA;&#x5B9A;</th>
+                  <th>&#x958B;&#x59CB;</th>
+                  <th>&#x7D42;&#x4E86;</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if submission_entries %}
+                  {% for entry in submission_entries %}
+                    <tr class="{{ entry.status_bg_class }} {% if entry.is_dimmed %}opacity-75{% endif %}">
+                      <td>
+                        {{ entry.name }}
+                        <input type="hidden" name="user_id" value="{{ entry.user_id }}">
+                        {% if entry.id %}
+                          <input type="hidden" name="entry_id_{{ entry.user_id }}" value="{{ entry.id }}">
+                        {% endif %}
+                      </td>
+                      <td><span class="badge text-bg-{{ entry.confirmed_status_class }}">{{ entry.confirmed_status_label }}</span></td>
+                      <td>
+                        <div>&#x63D0;&#x51FA;: {{ entry.submitted_text }}</div>
+                        {% if entry.confirmed_text %}<div>&#x78BA;&#x5B9A;: {{ entry.confirmed_text }}</div>{% endif %}
+                      </td>
+                      <td style="min-width: 130px;">
+                        <select class="form-select form-select-sm confirm-status-select" name="status_{{ entry.user_id }}" data-user-id="{{ entry.user_id }}">
+                          <option value="" {% if not entry.confirmed_status_value %}selected{% endif %}>未処理</option>
+                          <option value="assigned" {% if entry.confirmed_status_value == "assigned" %}selected{% endif %}>&#x51FA;&#x52E4;</option>
+                          <option value="rest" {% if entry.confirmed_status_value == "rest" %}selected{% endif %}>&#x4F11;&#x307F;</option>
+                        </select>
+                      </td>
+                      <td style="min-width: 120px;">
+                        <select class="form-select form-select-sm time-select time-select-{{ entry.user_id }}" name="start_time_{{ entry.user_id }}">
+                          <option value="">--:--</option>
+                          {% for time_option in quarter_hour_options %}
+                            <option value="{{ time_option }}" {% if entry.confirmed_start_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                      <td style="min-width: 120px;">
+                        <select class="form-select form-select-sm time-select time-select-{{ entry.user_id }}" name="end_time_{{ entry.user_id }}">
+                          <option value="">--:--</option>
+                          {% for time_option in quarter_hour_options %}
+                            <option value="{{ time_option }}" {% if entry.confirmed_end_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr><td colspan="6" class="text-muted">&#x8868;&#x793A;&#x5BFE;&#x8C61;&#x304C;&#x3042;&#x308A;&#x307E;&#x305B;&#x3093;&#x3002;</td></tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-3 d-grid d-md-flex justify-content-md-between align-items-center gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="1" id="saveUnsubmittedAsRest" name="save_unsubmitted_as_rest">
+              <label class="form-check-label" for="saveUnsubmittedAsRest">未提出者を休みとして保存する</label>
+            </div>
+            <button type="submit" class="btn btn-primary">&#x4FDD;&#x5B58;</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-3">{{ confirm_date_value }} &#x78BA;&#x5B9A;&#x30B7;&#x30D5;&#x30C8;</h2>
+        <div class="muted-note mb-3">&#x51FA;&#x52E4;&#x306E;&#x4EBA;&#x3060;&#x3051;&#x8868;&#x793A;&#x3057;&#x307E;&#x3059;&#x3002;</div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead><tr><th>&#x540D;&#x524D;</th><th>&#x6642;&#x9593;</th><th></th></tr></thead>
+            <tbody>
+              {% if confirmed_shifts %}
+                {% for shift in confirmed_shifts %}
+                  <tr>
+                    <td>{{ shift.name }}</td>
+                    <td>
+                      <form method="POST" action="/admin/update_confirmed_shift" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                        <input type="hidden" name="start" value="{{ start_value }}">
+                        <input type="hidden" name="end" value="{{ end_value }}">
+                        <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
+                        <input type="hidden" name="sort" value="{{ confirm_sort }}">
+                        <input type="hidden" name="next_page" value="/admin/confirm">
+                        <input type="hidden" name="confirmed_shift_id" value="{{ shift.id }}">
+                        <div class="col-md-5">
+                          <select class="form-select form-select-sm" name="confirmed_start_time">
+                            <option value="">--:--</option>
+                            {% for time_option in quarter_hour_options %}
+                              <option value="{{ time_option }}" {% if shift.start_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-md-5">
+                          <select class="form-select form-select-sm" name="confirmed_end_time">
+                            <option value="">--:--</option>
+                            {% for time_option in quarter_hour_options %}
+                              <option value="{{ time_option }}" {% if shift.end_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="col-md-2 d-grid"><button type="submit" class="btn btn-sm btn-outline-primary">&#x66F4;&#x65B0;</button></div>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="POST" action="/admin/delete_confirmed_shift" onsubmit="return confirm('この確定シフトを削除しますか？');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                        <input type="hidden" name="start" value="{{ start_value }}">
+                        <input type="hidden" name="end" value="{{ end_value }}">
+                        <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
+                        <input type="hidden" name="sort" value="{{ confirm_sort }}">
+                        <input type="hidden" name="next_page" value="/admin/confirm">
+                        <input type="hidden" name="confirmed_shift_id" value="{{ shift.id }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">&#x524A;&#x9664;</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="3" class="text-muted">&#x51FA;&#x52E4;&#x306E;&#x78BA;&#x5B9A;&#x30B7;&#x30D5;&#x30C8;&#x306F;&#x3042;&#x308A;&#x307E;&#x305B;&#x3093;&#x3002;</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card page-card mt-4 mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">&#x8868;&#x793A;&#x671F;&#x9593;</h2>
+    <form method="GET" class="row g-3">
+      <div class="col-md-4"><label class="form-label">&#x958B;&#x59CB;&#x65E5;</label><input type="date" class="form-control" name="start" id="confirmRangeStartInput" value="{{ start_value }}"></div>
+      <div class="col-md-4"><label class="form-label">&#x7D42;&#x4E86;&#x65E5;</label><input type="date" class="form-control" name="end" id="confirmRangeEndInput" value="{{ end_value }}"></div>
+      <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
+      <input type="hidden" name="sort" value="{{ confirm_sort }}">
+      <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-dark w-100">&#x8868;&#x793A;</button></div>
+      <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-dark w-100" id="confirmSevenDaysLink" href="/admin/confirm?sort={{ confirm_sort }}">&#x4ECA;&#x65E5;&#x304B;&#x3089;7&#x65E5;</a></div>
+      <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-primary w-100" id="confirmCurrentMonthLink" href="/admin/confirm?start={{ current_month_start_value }}&end={{ current_month_end_value }}&confirm_date={{ confirm_date_value }}&sort={{ confirm_sort }}">&#x4ECA;&#x6708;</a></div>
+      <div class="col-md-2 d-flex align-items-end"><a class="btn btn-outline-primary w-100" id="confirmNextMonthLink" href="/admin/confirm?start={{ next_month_start_value }}&end={{ next_month_end_value }}&confirm_date={{ confirm_date_value }}&sort={{ confirm_sort }}">&#x6765;&#x6708;</a></div>
+      <div class="col-md-4 d-flex align-items-end"><a class="btn btn-success w-100" href="/admin/export_confirmed?start={{ start_value }}&end={{ end_value }}">Excel&#x51FA;&#x529B;</a></div>
+    </form>
+  </div>
+</div>
+
+<div class="card page-card mt-4 mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">&#x671F;&#x9593;&#x30B5;&#x30DE;&#x30EA;</h2>
+    <form method="POST" action="/admin/update_required">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <input type="hidden" name="start" value="{{ start_value }}">
+      <input type="hidden" name="end" value="{{ end_value }}">
+      <input type="hidden" name="confirm_date" value="{{ confirm_date_value }}">
+      <input type="hidden" name="sort" value="{{ confirm_sort }}">
+      <input type="hidden" name="next_page" value="/admin/confirm">
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead><tr><th>&#x65E5;&#x4ED8;</th><th>&#x5FC5;&#x8981;&#x4EBA;&#x6570;</th><th>&#x72B6;&#x6CC1;</th><th>&#x78BA;&#x5B9A;&#x72B6;&#x6CC1;</th><th>&#x63D0;&#x51FA;&#x4E00;&#x89A7;</th></tr></thead>
+          <tbody>
+            {% for day in period_days %}
+              <tr>
+                <td><div class="fw-semibold">{{ day.date_label }}</div><div class="small text-muted">{{ day.ymd }}</div></td>
+                <td style="width: 160px;"><input type="number" class="form-control form-control-sm" min="0" name="required_{{ day.ymd }}" value="{{ day.required }}"></td>
+                <td>
+                  <div class="small">提出状況: 出勤提出 <b>{{ day.submission_work_count }}</b> / 休み提出 <b>{{ day.submission_rest_count }}</b> / 未提出 <b>{{ day.submission_none_count }}</b></div>
+                  <div class="small mt-1">確定状況: 出勤 <b>{{ day.confirmed_work_count }}</b> / 休み <b>{{ day.confirmed_rest_count }}</b> / 未処理 <b>{{ day.confirmed_pending_count }}</b></div>
+                </td>
+                <td><span class="badge text-bg-{{ day.confirm_status_class }}">{{ day.confirm_status_label }}</span></td>
+                <td>
+                  {% if day.entries %}
+                    {% for entry in day.entries %}
+                      <div class="border rounded p-2 mb-2 {{ entry.status_bg_class|default('bg-white') }} {{ entry.status_border_class|default('') }} {% if entry.is_dimmed %}opacity-75{% endif %}">
+                        <div class="d-flex justify-content-between gap-2"><div><b>{{ entry.name }}</b><div class="small mt-1">{{ entry.submitted_text }}{% if entry.confirmed_text %} / {{ entry.confirmed_text }}{% endif %}</div></div><span class="badge text-bg-{{ entry.confirmed_status_class }}">{{ entry.confirmed_status_label }}</span></div>
+                      </div>
+                    {% endfor %}
+                  {% else %}
+                    <div class="text-muted">&#x63D0;&#x51FA;&#x306A;&#x3057;</div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3"><button type="submit" class="btn btn-primary">&#x5FC5;&#x8981;&#x4EBA;&#x6570;&#x3092;&#x4FDD;&#x5B58;</button></div>
+    </form>
+  </div>
+</div>
+
+<script>
+function initAdminConfirmState() {
+  const params = new URLSearchParams(window.location.search);
+  const hasAnyStateParam = ["start", "end", "confirm_date", "date", "sort"].some((key) => params.has(key));
+  if (hasAnyStateParam) {
+    if (params.get("start")) adminStateSet("admin_confirm_range_start", params.get("start"));
+    if (params.get("end")) adminStateSet("admin_confirm_range_end", params.get("end"));
+    if (params.get("confirm_date") || params.get("date")) {
+      adminStateSet("admin_confirm_target_date", params.get("confirm_date") || params.get("date"));
+    }
+    if (params.get("sort")) adminStateSet("admin_confirm_sort", params.get("sort"));
+  } else {
+    const start = adminStateGet("admin_confirm_range_start");
+    const end = adminStateGet("admin_confirm_range_end");
+    const confirmDate = adminStateGet("admin_confirm_target_date");
+    const sort = adminStateGet("admin_confirm_sort");
+    if (start || end || confirmDate || sort) {
+      window.location.replace(adminUrlWithParams("/admin/confirm", {
+        start: start || "{{ start_value }}",
+        end: end || "{{ end_value }}",
+        confirm_date: confirmDate || "{{ confirm_date_value }}",
+        sort: sort || "{{ confirm_sort }}"
+      }));
+      return false;
+    }
+  }
+  return true;
+}
+
+initAdminConfirmState();
+
+function syncConfirmTimeControls(select, clearWhenDisabled) {
+  const userId = select.dataset.userId;
+  const disabled = select.value !== 'assigned';
+  document.querySelectorAll('.time-select-' + userId).forEach(function(el) {
+    el.disabled = disabled;
+    if (disabled && clearWhenDisabled) el.value = '';
+  });
+}
+document.addEventListener('DOMContentLoaded', function() {
+  const confirmDateInput = document.getElementById("confirmDateInput");
+  const rangeStartInput = document.getElementById("confirmRangeStartInput");
+  const rangeEndInput = document.getElementById("confirmRangeEndInput");
+  const saveUnsubmitted = document.getElementById("saveUnsubmittedAsRest");
+
+  if (confirmDateInput) {
+    adminStateSet("admin_confirm_target_date", confirmDateInput.value);
+    confirmDateInput.addEventListener("change", function() {
+      adminStateSet("admin_confirm_target_date", confirmDateInput.value);
+    });
+  }
+  if (rangeStartInput) {
+    adminStateSet("admin_confirm_range_start", rangeStartInput.value);
+    rangeStartInput.addEventListener("change", function() {
+      adminStateSet("admin_confirm_range_start", rangeStartInput.value);
+    });
+  }
+  if (rangeEndInput) {
+    adminStateSet("admin_confirm_range_end", rangeEndInput.value);
+    rangeEndInput.addEventListener("change", function() {
+      adminStateSet("admin_confirm_range_end", rangeEndInput.value);
+    });
+  }
+  adminStateSet("admin_confirm_sort", "{{ confirm_sort }}");
+  if (saveUnsubmitted) {
+    saveUnsubmitted.checked = adminStateGet("admin_confirm_save_unsubmitted_as_off") === "1";
+    saveUnsubmitted.addEventListener("change", function() {
+      adminStateSet("admin_confirm_save_unsubmitted_as_off", saveUnsubmitted.checked ? "1" : "0");
+    });
+  }
+
+  document.querySelectorAll('a[href*="/admin/confirm"]').forEach(function(link) {
+    link.addEventListener("click", function() {
+      const url = new URL(link.href, window.location.origin);
+      const dateInput = document.getElementById("confirmDateInput");
+      const startInput = document.getElementById("confirmRangeStartInput");
+      const endInput = document.getElementById("confirmRangeEndInput");
+      if (url.searchParams.has("sort") && dateInput && startInput && endInput) {
+        url.searchParams.set("confirm_date", dateInput.value);
+        url.searchParams.set("start", startInput.value);
+        url.searchParams.set("end", endInput.value);
+        link.href = `${url.pathname}${url.search}`;
+      }
+      if (url.searchParams.get("start")) adminStateSet("admin_confirm_range_start", url.searchParams.get("start"));
+      if (url.searchParams.get("end")) adminStateSet("admin_confirm_range_end", url.searchParams.get("end"));
+      if (url.searchParams.get("confirm_date")) adminStateSet("admin_confirm_target_date", url.searchParams.get("confirm_date"));
+      if (url.searchParams.get("sort")) adminStateSet("admin_confirm_sort", url.searchParams.get("sort"));
+    });
+  });
+  document.querySelectorAll("form").forEach(function(form) {
+    form.addEventListener("submit", function() {
+      const formData = new FormData(form);
+      if (formData.get("start")) adminStateSet("admin_confirm_range_start", formData.get("start"));
+      if (formData.get("end")) adminStateSet("admin_confirm_range_end", formData.get("end"));
+      if (formData.get("confirm_date")) adminStateSet("admin_confirm_target_date", formData.get("confirm_date"));
+      if (formData.get("sort")) adminStateSet("admin_confirm_sort", formData.get("sort"));
+      const checkbox = document.getElementById("saveUnsubmittedAsRest");
+      if (checkbox) adminStateSet("admin_confirm_save_unsubmitted_as_off", checkbox.checked ? "1" : "0");
+    });
+  });
+
+  document.querySelectorAll('.confirm-status-select').forEach(function(select) {
+    syncConfirmTimeControls(select, false);
+    select.addEventListener('change', function() { syncConfirmTimeControls(select, true); });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "admin_base.html" %}
+
+{% block title %}ホーム | 管理画面{% endblock %}
+
+{% block content %}
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">ダッシュボード</h1>
+    <div class="muted-note">今日の提出状況、確定状況、今月の概算人件費を確認できます。</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6 col-xl-3">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-2">未提出</div>
+        <div class="display-6 fw-semibold">{{ not_submitted_count }}</div>
+        <div class="muted-note mt-2">今日の未提出人数</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-xl-3">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-2">全員確定済み</div>
+        <div class="display-6 fw-semibold">{{ fully_confirmed_days }}</div>
+        <div class="muted-note mt-2">{{ dashboard_range_label }} の日数</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-xl-3">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-2">今月概算人件費</div>
+        <div class="h2 fw-semibold mb-0">¥{{ "{:,}".format(monthly_labor_cost) }}</div>
+        <div class="muted-note mt-2">{{ current_month_label }} の確定シフト基準</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-xl-3">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small mb-2">今日の出勤人数</div>
+        <div class="display-6 fw-semibold">{{ today_working_count }}</div>
+        <div class="muted-note mt-2">確定シフト優先で表示</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

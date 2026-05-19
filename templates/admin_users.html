@@ -1,0 +1,147 @@
+{% extends "admin_base.html" %}
+
+{% block title %}登録ユーザー一覧 | 管理画面{% endblock %}
+
+{% block content %}
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">登録ユーザー一覧</h1>
+    <div class="muted-note">既存のユーザー管理機能をそのまま使いながら、一覧画面だけを独立させています。</div>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+      <div>
+        <h2 class="h5 mb-1">有効ユーザー</h2>
+        <div class="muted-note">名前変更と無効化ができます。既存データは削除しません。</div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>名前</th>
+            <th>line_user_id</th>
+            <th>状態</th>
+            <th>表示順</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if active_admin_users %}
+            {% for user in active_admin_users %}
+              <tr>
+                <td>{{ user["name"] }}</td>
+                <td><code>{{ user["line_user_id"] }}</code></td>
+                <td><span class="badge text-bg-success">有効</span></td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <form method="POST" action="/admin/users/{{ user['id'] }}/move_up">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                      <input type="hidden" name="start" value="{{ start_value }}">
+                      <input type="hidden" name="end" value="{{ end_value }}">
+                      <input type="hidden" name="next_page" value="/admin/users">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary" {% if loop.first %}disabled{% endif %}>↑</button>
+                    </form>
+                    <form method="POST" action="/admin/users/{{ user['id'] }}/move_down">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                      <input type="hidden" name="start" value="{{ start_value }}">
+                      <input type="hidden" name="end" value="{{ end_value }}">
+                      <input type="hidden" name="next_page" value="/admin/users">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary" {% if loop.last %}disabled{% endif %}>↓</button>
+                    </form>
+                  </div>
+                </td>
+                <td>
+                  <div class="d-grid gap-2">
+                    <form method="POST" action="/admin/users/deactivate" onsubmit="return confirm('このユーザーを無効化しますか？');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                      <input type="hidden" name="start" value="{{ start_value }}">
+                      <input type="hidden" name="end" value="{{ end_value }}">
+                      <input type="hidden" name="next_page" value="/admin/users">
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">無効化</button>
+                    </form>
+                    <form method="POST" action="/admin/users/update_name" class="d-flex gap-2">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                      <input type="hidden" name="start" value="{{ start_value }}">
+                      <input type="hidden" name="end" value="{{ end_value }}">
+                      <input type="hidden" name="next_page" value="/admin/users">
+                      <input type="hidden" name="user_id" value="{{ user['id'] }}">
+                      <input type="text" class="form-control form-control-sm" name="new_name" value="{{ user['name'] }}" placeholder="新しい名前">
+                      <button type="submit" class="btn btn-sm btn-outline-primary">更新</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-muted">有効ユーザーはいません。</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card page-card">
+  <div class="card-body">
+    <details open>
+      <summary class="fw-semibold mb-3">無効ユーザー</summary>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle mb-0">
+          <thead>
+            <tr>
+              <th>名前</th>
+              <th>line_user_id</th>
+              <th>状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if inactive_admin_users %}
+              {% for user in inactive_admin_users %}
+                <tr>
+                  <td>{{ user["name"] }}</td>
+                  <td><code>{{ user["line_user_id"] }}</code></td>
+                  <td><span class="badge text-bg-secondary">無効</span></td>
+                  <td>
+                    <div class="d-grid gap-2">
+                      <form method="POST" action="/admin/users/activate" onsubmit="return confirm('このユーザーを有効化しますか？');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                        <input type="hidden" name="start" value="{{ start_value }}">
+                        <input type="hidden" name="end" value="{{ end_value }}">
+                        <input type="hidden" name="next_page" value="/admin/users">
+                        <input type="hidden" name="user_id" value="{{ user['id'] }}">
+                        <button type="submit" class="btn btn-sm btn-outline-success">有効化</button>
+                      </form>
+                      <form method="POST" action="/admin/users/update_name" class="d-flex gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                        <input type="hidden" name="start" value="{{ start_value }}">
+                        <input type="hidden" name="end" value="{{ end_value }}">
+                        <input type="hidden" name="next_page" value="/admin/users">
+                        <input type="hidden" name="user_id" value="{{ user['id'] }}">
+                        <input type="text" class="form-control form-control-sm" name="new_name" value="{{ user['name'] }}" placeholder="新しい名前">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">更新</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="4" class="text-muted">無効ユーザーはいません。</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,192 @@
+{% extends "admin_base.html" %}
+
+{% block title %}人件費集計 | 管理画面{% endblock %}
+
+{% block content %}
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">概算人件費集計</h1>
+    <div class="muted-note">確定シフトを基準に、休憩・時間外労働・深夜手当をON/OFFして概算人件費を確認できます。</div>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <form method="POST" action="/admin/update_hourly_wage" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <input type="hidden" name="start" value="{{ start_value }}">
+      <input type="hidden" name="end" value="{{ end_value }}">
+      <input type="hidden" name="next_page" value="/admin/cost">
+      <div class="col-md-4">
+        <label class="form-label">基本時給</label>
+        <input type="number" class="form-control" name="base_hourly_wage" min="0" value="{{ labor_settings.base_hourly_wage }}">
+        <div class="form-text">settings.BASE_HOURLY_WAGE に保存します。</div>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label d-block">概算ルール</label>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="break_enabled" id="breakEnabled" {% if labor_settings.break_enabled %}checked{% endif %}>
+              <label class="form-check-label" for="breakEnabled">休憩ルール</label>
+            </div>
+            <div class="form-text">6時間超で45分、8時間超で60分を差し引く</div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="overtime_enabled" id="overtimeEnabled" {% if labor_settings.overtime_enabled %}checked{% endif %}>
+              <label class="form-check-label" for="overtimeEnabled">時間外労働</label>
+            </div>
+            <div class="form-text">1日8時間超過分を1.25倍で計算</div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="night_enabled" id="nightEnabled" {% if labor_settings.night_enabled %}checked{% endif %}>
+              <label class="form-check-label" for="nightEnabled">深夜手当</label>
+            </div>
+            <div class="form-text">22:00〜翌5:00を1.25倍で計算</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-primary w-100">設定を保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-3">日別集計</h2>
+        <div class="row g-2">
+          <div class="col-sm-8">
+            <input type="date" class="form-control" id="dailySummaryDate" value="{{ start_value }}">
+          </div>
+          <div class="col-sm-4">
+            <button type="button" class="btn btn-dark w-100" id="loadDailySummaryBtn">日別集計</button>
+          </div>
+        </div>
+        <div id="dailySummaryResult" class="mt-3 small text-muted">日付を選んで集計してください。</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <h2 class="h5 mb-3">月別集計</h2>
+        <div class="row g-2">
+          <div class="col-sm-8">
+            <input type="month" class="form-control" id="monthlySummaryMonth" value="{{ current_month_value }}">
+          </div>
+          <div class="col-sm-4">
+            <button type="button" class="btn btn-dark w-100" id="loadMonthlySummaryBtn">月別集計</button>
+          </div>
+        </div>
+        <div id="monthlySummaryResult" class="mt-3 small text-muted">年月を選んで集計してください。</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function formatHours(value) {
+  const num = Number(value || 0);
+  return num.toFixed(2);
+}
+
+function formatYen(value) {
+  return new Intl.NumberFormat("ja-JP").format(Number(value || 0));
+}
+
+function formatEnabled(value) {
+  return value ? "有効" : "無効";
+}
+
+function renderSummaryResult(data, labelKey) {
+  const users = Array.isArray(data.users) ? data.users : [];
+  const detailBlocks = users.length
+    ? users.map((user) => `
+        <details class="mt-2">
+          <summary class="fw-semibold">内訳を見る: ${user.name || "未設定"}</summary>
+          <div class="mt-2 small">
+            <div>確定勤務時間: ${user.shift_time || "月合計"}</div>
+            <div>休憩時間: ${user.break_label || `${user.break_minutes || 0}分`}</div>
+            <div>実働時間: ${formatHours(user.actual_hours)}時間</div>
+            <div>通常勤務時間: ${formatHours(user.normal_hours)}時間</div>
+            <div>時間外労働時間: ${user.overtime_label || `${formatHours(user.overtime_hours)}時間`}</div>
+            <div>深夜勤務時間: ${user.night_label || `${formatHours(user.night_hours)}時間`}</div>
+            <div>通常賃金: ¥${formatYen(user.normal_wage)}</div>
+            <div>時間外割増分: ¥${formatYen(user.overtime_extra_wage)}</div>
+            <div>深夜割増分: ¥${formatYen(user.night_extra_wage)}</div>
+            <div>合計人件費: ¥${formatYen(user.wage)}</div>
+          </div>
+        </details>
+      `).join("")
+    : '<div class="text-muted small mt-2">対象データはありません。</div>';
+
+  return `
+    <div class="border rounded-3 bg-white p-3">
+      <div class="fw-semibold mb-2">${data[labelKey]}</div>
+      <div>基本時給: ¥${formatYen(data.base_hourly_wage || data.hourly_wage)}</div>
+      <div>休憩ルール: ${formatEnabled(data.break_enabled)}</div>
+      <div>時間外労働: ${formatEnabled(data.overtime_enabled)}</div>
+      <div>深夜手当: ${formatEnabled(data.night_enabled)}</div>
+      <div>総実働時間: ${formatHours(data.total_hours)} 時間</div>
+      <div>総労働分数: ${data.total_minutes} 分</div>
+      <div>総人件費: ¥${formatYen(data.total_labor_cost)}</div>
+      <div class="mt-3">${detailBlocks}</div>
+    </div>
+  `;
+}
+
+async function loadAdminSummary(url, resultId, labelKey) {
+  const resultEl = document.getElementById(resultId);
+  resultEl.innerHTML = '<div class="text-muted">読み込み中...</div>';
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "集計の取得に失敗しました");
+    }
+    resultEl.innerHTML = renderSummaryResult(data, labelKey);
+  } catch (error) {
+    resultEl.innerHTML = `<div class="text-danger">${error.message || error}</div>`;
+  }
+}
+
+document.getElementById("loadDailySummaryBtn").addEventListener("click", async () => {
+  const targetDate = document.getElementById("dailySummaryDate").value;
+  adminStateSet("admin_cost_daily_date", targetDate);
+  await loadAdminSummary(`/admin/api/daily_summary?date=${encodeURIComponent(targetDate)}`, "dailySummaryResult", "date");
+});
+
+document.getElementById("loadMonthlySummaryBtn").addEventListener("click", async () => {
+  const targetMonth = document.getElementById("monthlySummaryMonth").value;
+  adminStateSet("admin_cost_month", targetMonth);
+  await loadAdminSummary(`/admin/api/monthly_summary?month=${encodeURIComponent(targetMonth)}`, "monthlySummaryResult", "month");
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const dailyInput = document.getElementById("dailySummaryDate");
+  const monthlyInput = document.getElementById("monthlySummaryMonth");
+  const savedDailyDate = adminStateGet("admin_cost_daily_date");
+  const savedMonth = adminStateGet("admin_cost_month");
+  if (dailyInput) {
+    if (savedDailyDate) dailyInput.value = savedDailyDate;
+    dailyInput.addEventListener("change", () => adminStateSet("admin_cost_daily_date", dailyInput.value));
+  }
+  if (monthlyInput) {
+    if (savedMonth) monthlyInput.value = savedMonth;
+    monthlyInput.addEventListener("change", () => adminStateSet("admin_cost_month", monthlyInput.value));
+  }
+});
+</script>
+{% endblock %}

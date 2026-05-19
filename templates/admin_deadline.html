@@ -1,0 +1,126 @@
+{% extends "admin_base.html" %}
+
+{% block title %}シフト提出期限 | 管理画面{% endblock %}
+
+{% block content %}
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">シフト提出期限</h1>
+    <div class="muted-note">既存の提出期限設定を独立ページに表示しています。POST ルートは既存のまま利用しています。</div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small">現在の方式</div>
+        <div class="fs-5 fw-semibold">{{ submission_status_text }}</div>
+        <div class="muted-note mt-2">表示ルール: {{ active_deadline_config["display"] }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card page-card h-100">
+      <div class="card-body">
+        <div class="text-muted small">固定日時 / 相対期限</div>
+        <div class="fs-6 fw-semibold">{{ submission_deadline_text }}</div>
+        <div class="muted-note mt-2">相対期限: {{ relative_deadline_text }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card page-card">
+  <div class="card-body">
+    <form method="POST" action="/admin/update_submission_deadline" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <input type="hidden" name="start" value="{{ start_value }}">
+      <input type="hidden" name="end" value="{{ end_value }}">
+      <input type="hidden" name="next_page" value="/admin/deadline">
+
+      <div class="col-12">
+        <label class="form-label d-block mb-2">締切方式</label>
+        <div class="d-flex flex-column flex-md-row gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="deadline_mode" id="deadlineModeNone" value="" {% if deadline_mode_value == "" %}checked{% endif %}>
+            <label class="form-check-label" for="deadlineModeNone">未設定</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="deadline_mode" id="deadlineModeFixed" value="fixed" {% if deadline_mode_value == "fixed" %}checked{% endif %}>
+            <label class="form-check-label" for="deadlineModeFixed">固定日時方式</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="deadline_mode" id="deadlineModeRelative" value="relative" {% if deadline_mode_value == "relative" %}checked{% endif %}>
+            <label class="form-check-label" for="deadlineModeRelative">相対期限方式</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="deadline_mode" id="deadlineModeMonthlyFixed" value="monthly_fixed" {% if deadline_mode_value == "monthly_fixed" %}checked{% endif %}>
+            <label class="form-check-label" for="deadlineModeMonthlyFixed">月固定締切方式</label>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-outline-primary" formaction="/admin/update_deadline_mode">
+            この方式で保存
+          </button>
+          <div class="form-text">詳細値は変更せず、選択中の締切方式だけを保存します。未設定を保存すると提出期限チェックは無効になります。</div>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">固定日時の締切</label>
+        <input type="datetime-local" class="form-control" name="submission_deadline" value="{{ submission_deadline_value }}">
+        <div class="form-text">固定日時方式で使う締切日時です。</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">何日前</label>
+        <input type="number" class="form-control" name="deadline_days_before" min="0" value="{{ deadline_days_before_value }}">
+        <div class="form-text">相対期限方式で使います。</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">締切時刻</label>
+        <input type="time" class="form-control" name="deadline_time" value="{{ deadline_time_value }}">
+        <div class="form-text">例: 23:59</div>
+      </div>
+
+      <div class="col-12">
+        <hr class="my-2">
+        <div class="fw-semibold">月固定締切方式</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">締切日</label>
+        <input type="number" class="form-control" name="monthly_deadline_day" min="1" max="31" value="{{ monthly_deadline_day_value }}" placeholder="15">
+        <div class="form-text">毎月何日に締め切るか。31日など存在しない日は月末扱いです。</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">対象</label>
+        <select class="form-select" name="monthly_target">
+          <option value="current_month" {% if monthly_target_value == "current_month" %}selected{% endif %}>当月シフト</option>
+          <option value="next_month" {% if monthly_target_value == "next_month" %}selected{% endif %}>翌月シフト</option>
+        </select>
+        <div class="form-text">初期値は翌月シフトです。</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">月固定の締切時刻</label>
+        <input type="time" class="form-control" name="monthly_deadline_time" value="{{ monthly_deadline_time_value }}" placeholder="23:59">
+        <div class="form-text">例: 23:59</div>
+      </div>
+
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">保存</button>
+      </div>
+
+      <div class="col-12">
+        <div class="form-text">
+          固定日時方式は全日共通の締切です。相対期限方式は「提出対象日から N 日前の HH:MM」を締切にします。月固定締切方式は「毎月指定日 HH:MM までに当月/翌月シフトを提出」として扱います。
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

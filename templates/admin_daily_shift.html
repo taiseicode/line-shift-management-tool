@@ -1,0 +1,378 @@
+{% extends "admin_base.html" %}
+
+{% block title %}1日シフト表 | 管理画面{% endblock %}
+
+{% block content %}
+<style>
+  .timeline-scroll { overflow-x: auto; }
+  .timeline-table { min-width: 980px; width: max-content; }
+  .timeline-grid {
+    display: flex;
+    position: relative;
+  }
+  .timeline-slot, .timeline-header-slot {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border-left: 1px solid #d7dde6;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .timeline-header-slot {
+    height: 42px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .timeline-hour-even { background: #f3f4f6; }
+  .timeline-hour-odd { background: #fff; }
+  .timeline-bar {
+    position: absolute;
+    top: 7px;
+    height: 20px;
+    border-radius: 4px;
+    background: #16a34a;
+    box-shadow: inset 0 0 0 1px rgba(21, 128, 61, 0.35);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .timeline-hour-boundary { border-left: 2px solid #9ca3af; }
+  .timeline-name { min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 3; }
+  .timeline-time { min-width: 104px; background: #fff; }
+  .timeline-action { width: 86px; background: #fff; }
+</style>
+
+<div class="card page-hero">
+  <div class="card-body p-4">
+    <h1 class="h3 mb-2">1日シフト表</h1>
+    <div class="muted-note">確定済みシフトを横棒タイムラインで確認し、当日の直前変更や代打追加に対応できます。</div>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">対象日</h2>
+    <form method="GET" class="row g-3" id="dailyShiftDateForm" action="/admin/daily-shift">
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-dark w-100" onclick="shiftTargetDate('dailyShiftDateInput', 'dailyShiftDateForm', -1)">前の日</button>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">対象日</label>
+        <input type="date" class="form-control" name="target_date" id="dailyShiftDateInput" value="{{ target_date_value }}">
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-dark w-100" onclick="shiftTargetDate('dailyShiftDateInput', 'dailyShiftDateForm', 1)">次の日</button>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-dark w-100">表示する</button>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <a class="btn btn-outline-primary w-100" href="{{ confirm_page_url }}">確定シフト管理へ</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <h2 class="h5 mb-3">タイムライン表示時間</h2>
+    <form method="POST" action="/admin/daily-shift/settings" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <input type="hidden" name="target_date" value="{{ target_date_value }}">
+      <input type="hidden" name="confirm_date" value="{{ target_date_value }}">
+      <input type="hidden" name="next_page" value="/admin/daily-shift">
+      <div class="col-md-4">
+        <label class="form-label">表示開始時間</label>
+        <select class="form-select" name="daily_shift_graph_start_time">
+          {% for time_option in quarter_hour_options %}
+            <option value="{{ time_option }}" {% if daily_shift_graph_start_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">表示終了時間</label>
+        <select class="form-select" name="daily_shift_graph_end_time">
+          {% for time_option in quarter_hour_options %}
+            <option value="{{ time_option }}" {% if daily_shift_graph_end_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-dark w-100">この時間で保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card page-card mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-xl-row justify-content-between gap-3 mb-3">
+      <div>
+        <h2 class="h5 mb-1">{{ target_date_value }} タイムライン</h2>
+        <div class="muted-note">開始・終了を変更すると、横棒がすぐに更新されます。</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-success" href="/admin/daily-shift/export?target_date={{ target_date_value }}">1日シフト表をExcel出力</a>
+      </div>
+    </div>
+
+    {% if not confirmed_shifts %}
+      <div class="alert alert-warning">
+        この日はまだ確定シフトが作成されていません。先に確定シフト管理で出勤を設定するか、下のスタッフ追加から確定シフトを追加してください。
+      </div>
+    {% endif %}
+
+    <form method="POST" action="/admin/daily-shift/save" id="timelineForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <input type="hidden" name="confirm_date" value="{{ target_date_value }}">
+      <input type="hidden" name="target_date" value="{{ target_date_value }}">
+      <input type="hidden" name="next_page" value="/admin/daily-shift">
+      <input type="hidden" name="daily_shift_graph_start_time" value="{{ daily_shift_graph_start_time }}">
+      <input type="hidden" name="daily_shift_graph_end_time" value="{{ daily_shift_graph_end_time }}">
+
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+        <button type="button" class="btn btn-outline-primary" id="addTimelineRowBtn">行を追加</button>
+        <button type="submit" class="btn btn-primary">タイムライン保存</button>
+      </div>
+
+      <div class="timeline-scroll">
+        <div class="timeline-table" style="--timeline-slot-count: {{ timeline_slots|length }};" data-graph-start="{{ timeline_slots[0].start if timeline_slots else 0 }}" data-graph-end="{{ timeline_slots[-1].end if timeline_slots else 0 }}">
+          <div class="d-flex align-items-end fw-semibold small border-bottom pb-1">
+            <div class="timeline-name pe-2">名前</div>
+            <div class="timeline-time pe-2">勤務開始</div>
+            <div class="timeline-time pe-2">勤務終了</div>
+            <div class="timeline-grid">
+              {% for slot in timeline_slots %}
+                <div class="timeline-header-slot timeline-hour-{{ 'even' if slot.hour_band % 2 == 0 else 'odd' }} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" style="width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px; min-width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px;">{{ slot.label }}</div>
+              {% endfor %}
+            </div>
+            <div class="timeline-action"></div>
+          </div>
+
+          <div id="timelineRows">
+            {% for shift in confirmed_shifts %}
+              <div class="d-flex align-items-center timeline-row border-bottom py-2" data-row-id="existing_{{ shift.id }}">
+                <input type="hidden" name="timeline_row_id" value="existing_{{ shift.id }}">
+                <input type="hidden" name="timeline_confirmed_shift_id_existing_{{ shift.id }}" value="{{ shift.id }}">
+                <input type="hidden" name="timeline_user_id_existing_{{ shift.id }}" value="{{ shift.user_id }}">
+                <input type="hidden" class="timeline-delete-input" name="timeline_delete_existing_{{ shift.id }}" value="0">
+                <div class="timeline-name pe-2 fw-semibold">{{ shift.name }}</div>
+                <div class="timeline-time pe-2">
+                  <select class="form-select form-select-sm timeline-start" name="timeline_start_time_existing_{{ shift.id }}">
+                    {% for time_option in quarter_hour_options %}
+                      <option value="{{ time_option }}" {% if shift.start_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="timeline-time pe-2">
+                  <select class="form-select form-select-sm timeline-end" name="timeline_end_time_existing_{{ shift.id }}">
+                    {% for time_option in quarter_hour_options %}
+                      <option value="{{ time_option }}" {% if shift.end_time == time_option %}selected{% endif %}>{{ time_option }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="timeline-grid">
+                  <div class="timeline-bar"></div>
+                  {% for cell in shift.cells %}
+                    <div class="timeline-slot timeline-hour-{{ 'even' if cell.hour_band % 2 == 0 else 'odd' }} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" data-slot-start="{{ timeline_slots[loop.index0].start }}" data-slot-end="{{ timeline_slots[loop.index0].end }}" style="width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px; min-width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px;"></div>
+                  {% endfor %}
+                </div>
+                <div class="timeline-action ps-2">
+                  <button type="button" class="btn btn-sm btn-outline-danger timeline-delete-btn">削除</button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+
+          <template id="timelineRowTemplate">
+            <div class="d-flex align-items-center timeline-row border-bottom py-2" data-row-id="__ROW_ID__">
+              <input type="hidden" name="timeline_row_id" value="__ROW_ID__">
+              <input type="hidden" name="timeline_confirmed_shift_id___ROW_ID__" value="">
+              <input type="hidden" class="timeline-delete-input" name="timeline_delete___ROW_ID__" value="0">
+              <div class="timeline-name pe-2">
+                <select class="form-select form-select-sm" name="timeline_user_id___ROW_ID__">
+                  <option value="">スタッフ選択</option>
+                  {% for user in active_users %}
+                    <option value="{{ user.id }}" {% if user.already_confirmed %}disabled{% endif %}>{{ user.name }}{% if user.already_confirmed %}（登録済み）{% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="timeline-time pe-2">
+                <select class="form-select form-select-sm timeline-start" name="timeline_start_time___ROW_ID__">
+                  {% for time_option in quarter_hour_options %}
+                    <option value="{{ time_option }}">{{ time_option }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="timeline-time pe-2">
+                <select class="form-select form-select-sm timeline-end" name="timeline_end_time___ROW_ID__">
+                  {% for time_option in quarter_hour_options %}
+                    <option value="{{ time_option }}">{{ time_option }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="timeline-grid">
+                <div class="timeline-bar"></div>
+                {% for slot in timeline_slots %}
+                  <div class="timeline-slot timeline-hour-{{ 'even' if slot.hour_band % 2 == 0 else 'odd' }} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" data-slot-start="{{ slot.start }}" data-slot-end="{{ slot.end }}" style="width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px; min-width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px;"></div>
+                {% endfor %}
+              </div>
+              <div class="timeline-action ps-2">
+                <button type="button" class="btn btn-sm btn-outline-danger timeline-delete-btn">削除</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const MINUTES_PER_DAY = 24 * 60;
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function timeToMinutes(value) {
+  if (!value || !value.includes(":")) return null;
+  const [hour, minute] = value.split(":").map(Number);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function getTimelineRange(row) {
+  const table = row.closest(".timeline-table");
+  if (!table) return null;
+  const rangeStart = Number(table.dataset.graphStart);
+  const rangeEnd = Number(table.dataset.graphEnd);
+  if (Number.isNaN(rangeStart) || Number.isNaN(rangeEnd) || rangeEnd <= rangeStart) return null;
+  return { rangeStart, rangeEnd, rangeMinutes: rangeEnd - rangeStart };
+}
+
+function resolveWorkRange(startValue, endValue, rangeStart, rangeEnd) {
+  const rawStart = timeToMinutes(startValue);
+  const rawEnd = timeToMinutes(endValue);
+  if (rawStart === null || rawEnd === null) return null;
+
+  let baseEnd = rawEnd;
+  if (baseEnd <= rawStart) baseEnd += MINUTES_PER_DAY;
+
+  const candidates = [
+    { start: rawStart, end: baseEnd },
+    { start: rawStart + MINUTES_PER_DAY, end: baseEnd + MINUTES_PER_DAY },
+  ];
+  let best = null;
+  let bestOverlap = 0;
+  candidates.forEach((candidate) => {
+    const overlap = Math.min(candidate.end, rangeEnd) - Math.max(candidate.start, rangeStart);
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = candidate;
+    }
+  });
+  return bestOverlap > 0 ? best : null;
+}
+
+function updateTimelineBar(row) {
+  const startSelect = row.querySelector(".timeline-start");
+  const endSelect = row.querySelector(".timeline-end");
+  const bar = row.querySelector(".timeline-bar");
+  const range = getTimelineRange(row);
+  if (!startSelect || !endSelect || !bar || !range) return;
+
+  const workRange = resolveWorkRange(startSelect.value, endSelect.value, range.rangeStart, range.rangeEnd);
+  if (!workRange) {
+    bar.style.display = "none";
+    return;
+  }
+
+  const clippedStart = Math.max(workRange.start, range.rangeStart);
+  const clippedEnd = Math.min(workRange.end, range.rangeEnd);
+  if (clippedEnd <= clippedStart) {
+    bar.style.display = "none";
+    return;
+  }
+
+  const left = clampPercent(((clippedStart - range.rangeStart) / range.rangeMinutes) * 100);
+  const width = clampPercent(((clippedEnd - clippedStart) / range.rangeMinutes) * 100);
+  bar.style.display = "block";
+  bar.style.left = `${left}%`;
+  bar.style.width = `${width}%`;
+}
+
+function updateAllTimelineBars() {
+  document.querySelectorAll(".timeline-row").forEach(updateTimelineBar);
+}
+
+function wireTimelineRow(row) {
+  row.querySelectorAll(".timeline-start, .timeline-end").forEach((select) => {
+    select.addEventListener("change", () => updateTimelineBar(row));
+  });
+  const deleteBtn = row.querySelector(".timeline-delete-btn");
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", () => {
+      const deleteInput = row.querySelector(".timeline-delete-input");
+      if (deleteInput && row.dataset.rowId && row.dataset.rowId.startsWith("existing_")) {
+        deleteInput.value = "1";
+        row.classList.add("d-none");
+      } else {
+        row.remove();
+      }
+    });
+  }
+  updateTimelineBar(row);
+}
+
+const addTimelineRowBtn = document.getElementById("addTimelineRowBtn");
+if (addTimelineRowBtn) {
+  addTimelineRowBtn.addEventListener("click", () => {
+    const template = document.getElementById("timelineRowTemplate");
+    const rows = document.getElementById("timelineRows");
+    if (!template || !rows) return;
+    const rowId = `new_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = template.innerHTML.replaceAll("__ROW_ID__", rowId).trim();
+    const row = wrapper.firstElementChild;
+    rows.appendChild(row);
+    wireTimelineRow(row);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("target_date")) {
+    adminStateSet("admin_daily_shift_date", params.get("target_date"));
+  } else {
+    const savedDate = adminStateGet("admin_daily_shift_date");
+    if (savedDate) {
+      window.location.replace(adminUrlWithParams("/admin/daily-shift", { target_date: savedDate }));
+      return;
+    }
+  }
+
+  const dateInput = document.getElementById("dailyShiftDateInput");
+  if (dateInput) {
+    adminStateSet("admin_daily_shift_date", dateInput.value);
+    dateInput.addEventListener("change", () => {
+      adminStateSet("admin_daily_shift_date", dateInput.value);
+    });
+  }
+  document.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", () => {
+      const formData = new FormData(form);
+      const targetDate = formData.get("target_date") || formData.get("confirm_date");
+      if (targetDate) adminStateSet("admin_daily_shift_date", targetDate);
+    });
+  });
+
+  document.querySelectorAll(".timeline-row").forEach(wireTimelineRow);
+  updateAllTimelineBars();
+});
+</script>
+{% endblock %}
