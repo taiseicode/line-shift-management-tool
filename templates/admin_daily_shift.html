@@ -4,44 +4,7 @@
 
 {% block content %}
 <style>
-  .timeline-scroll { overflow-x: auto; }
-  .timeline-table { min-width: 980px; width: max-content; }
-  .timeline-grid {
-    display: flex;
-    position: relative;
-  }
-  .timeline-slot, .timeline-header-slot {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    border-left: 1px solid #d7dde6;
-    border-bottom: 1px solid #e5e7eb;
-  }
-  .timeline-header-slot {
-    height: 42px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: #374151;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .timeline-hour-even { background: #f3f4f6; }
-  .timeline-hour-odd { background: #fff; }
-  .timeline-bar {
-    position: absolute;
-    top: 7px;
-    height: 20px;
-    border-radius: 4px;
-    background: #16a34a;
-    box-shadow: inset 0 0 0 1px rgba(21, 128, 61, 0.35);
-    pointer-events: none;
-    z-index: 2;
-  }
-  .timeline-hour-boundary { border-left: 2px solid #9ca3af; }
-  .timeline-name { min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 3; }
-  .timeline-time { min-width: 104px; background: #fff; }
-  .timeline-action { width: 86px; background: #fff; }
+  .timeline-table { min-width: 980px; }
 </style>
 
 <div class="card page-hero">
