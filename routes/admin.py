@@ -291,46 +291,39 @@ def _build_home_page_context():
     today = ctx["today"]
     today_value = to_ymd(today)
 
-    today_summary = calculate_staff_summary(today, today)[today_value]
-    confirmed_today = get_confirmed_shifts_by_date(today_value)
+    confirmed_today = [
+        row for row in get_confirmed_shifts_by_date(today_value)
+        if int(row["is_assigned"] or 0) == 1 and row["start_time"] and row["end_time"]
+    ]
+    daily_labor = build_daily_summary(today)
+    gross_minutes = sum(int(user["gross_minutes"] or 0) for user in daily_labor["users"])
 
-    start_month = date(today.year, today.month, 1)
-    if today.month == 12:
-        next_month = date(today.year + 1, 1, 1)
-    else:
-        next_month = date(today.year, today.month + 1, 1)
-    monthly_labor = build_monthly_summary(start_month, next_month, today.strftime("%Y-%m"))
-
-    rows = get_entries_range(ctx["start_value"], ctx["end_value"])
-    decision_rows = get_confirmed_shift_decisions_range(ctx["start_value"], ctx["end_value"])
-    by_date = {}
-    for row in rows:
-        if int(row["active"]) != 1:
-            continue
-        by_date.setdefault(row["date"], []).append(row)
-
-    decided_user_ids_by_date = {}
-    for row in decision_rows:
-        decided_user_ids_by_date.setdefault(row["date"], set()).add(int(row["user_id"]))
-
-    fully_confirmed_days = 0
-    for current_date in daterange_inclusive(ctx["start_d"], ctx["end_d"]):
-        ymd = to_ymd(current_date)
-        actionable_user_ids = {
-            int(row["user_id"])
-            for row in by_date.get(ymd, [])
-            if int(row["off"]) != 1 and row["start_time"] and row["end_time"]
+    ctx["daily_shift_graph_start_time"] = get_daily_shift_graph_start_time()
+    ctx["daily_shift_graph_end_time"] = get_daily_shift_graph_end_time()
+    ctx["timeline_slots"] = _build_timeline_slots(ctx["daily_shift_graph_start_time"], ctx["daily_shift_graph_end_time"])
+    ctx["today_timeline_shifts"] = [
+        {
+            "id": int(shift["id"]),
+            "name": shift["name"] or "",
+            "start_time": round_time_to_quarter(shift["start_time"] or ""),
+            "end_time": round_time_to_quarter(shift["end_time"] or ""),
+            "cells": _build_timeline_cells(
+                round_time_to_quarter(shift["start_time"] or ""),
+                round_time_to_quarter(shift["end_time"] or ""),
+                ctx["timeline_slots"],
+            ),
         }
-        if actionable_user_ids and actionable_user_ids.issubset(decided_user_ids_by_date.get(ymd, set())):
-            fully_confirmed_days += 1
+        for shift in confirmed_today
+    ]
 
     ctx.update({
-        "not_submitted_count": today_summary["not_submitted_count"],
-        "fully_confirmed_days": fully_confirmed_days,
-        "monthly_labor_cost": monthly_labor["total_labor_cost"],
-        "today_working_count": len(confirmed_today) if confirmed_today else today_summary["working_count"],
-        "dashboard_range_label": f"{ctx['start_value']} 〜 {ctx['end_value']}",
-        "current_month_label": today.strftime("%Y-%m"),
+        "today_value": today_value,
+        "today_date_label": f"{today.year}年{today.month}月{today.day}日（{get_weekday_jp(today)}）",
+        "today_working_count": len(confirmed_today),
+        "today_labor_cost": daily_labor["total_labor_cost"],
+        "today_total_work_hours": f"{gross_minutes / 60:.1f}h",
+        "daily_shift_url": f"/admin/daily-shift?target_date={today_value}",
+        "confirm_today_url": f"/admin/confirm?start={today_value}&end={today_value}&confirm_date={today_value}&sort=display",
     })
     return ctx
 

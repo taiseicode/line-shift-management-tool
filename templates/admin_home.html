@@ -1,54 +1,135 @@
 {% extends "admin_base.html" %}
 
-{% block title %}ホーム | 管理画面{% endblock %}
+{% block title %}今日の運営状況 | 管理画面{% endblock %}
 
 {% block content %}
+<style>
+  .operation-metric {
+    min-height: 132px;
+  }
+  .metric-label {
+    color: #64748b;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+  .timeline-scroll { overflow-x: auto; }
+  .timeline-table { min-width: 980px; width: max-content; }
+  .timeline-grid {
+    display: flex;
+    position: relative;
+  }
+  .timeline-slot, .timeline-header-slot {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border-left: 1px solid #d7dde6;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .timeline-header-slot {
+    height: 42px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .timeline-hour-even { background: #f3f4f6; }
+  .timeline-hour-odd { background: #fff; }
+  .timeline-slot-active {
+    background: #16a34a;
+    box-shadow: inset 0 0 0 1px rgba(21, 128, 61, 0.35);
+  }
+  .timeline-hour-boundary { border-left: 2px solid #9ca3af; }
+  .timeline-name { min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 3; }
+  .timeline-time { min-width: 104px; background: #fff; }
+</style>
+
 <div class="card page-hero">
   <div class="card-body p-4">
-    <h1 class="h3 mb-2">ダッシュボード</h1>
-    <div class="muted-note">今日の提出状況、確定状況、今月の概算人件費を確認できます。</div>
+    <h1 class="h3 mb-2">今日の運営状況</h1>
+    <div class="muted-note">{{ today_date_label }}</div>
   </div>
 </div>
 
-<div class="row g-4">
-  <div class="col-md-6 col-xl-3">
-    <div class="card page-card h-100">
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card page-card operation-metric h-100">
       <div class="card-body">
-        <div class="text-muted small mb-2">未提出</div>
-        <div class="display-6 fw-semibold">{{ not_submitted_count }}</div>
-        <div class="muted-note mt-2">今日の未提出人数</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-6 col-xl-3">
-    <div class="card page-card h-100">
-      <div class="card-body">
-        <div class="text-muted small mb-2">全員確定済み</div>
-        <div class="display-6 fw-semibold">{{ fully_confirmed_days }}</div>
-        <div class="muted-note mt-2">{{ dashboard_range_label }} の日数</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-6 col-xl-3">
-    <div class="card page-card h-100">
-      <div class="card-body">
-        <div class="text-muted small mb-2">今月概算人件費</div>
-        <div class="h2 fw-semibold mb-0">¥{{ "{:,}".format(monthly_labor_cost) }}</div>
-        <div class="muted-note mt-2">{{ current_month_label }} の確定シフト基準</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-6 col-xl-3">
-    <div class="card page-card h-100">
-      <div class="card-body">
-        <div class="text-muted small mb-2">今日の出勤人数</div>
+        <div class="metric-label mb-2">本日の出勤人数</div>
         <div class="display-6 fw-semibold">{{ today_working_count }}</div>
-        <div class="muted-note mt-2">確定シフト優先で表示</div>
+        <div class="muted-note mt-2">確定シフトの出勤者</div>
       </div>
     </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card page-card operation-metric h-100">
+      <div class="card-body">
+        <div class="metric-label mb-2">今日の人件費</div>
+        <div class="h2 fw-semibold mb-0">¥{{ "{:,}".format(today_labor_cost) }}</div>
+        <div class="muted-note mt-2">人件費集計設定を反映</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card page-card operation-metric h-100">
+      <div class="card-body">
+        <div class="metric-label mb-2">本日の総労働時間</div>
+        <div class="display-6 fw-semibold">{{ today_total_work_hours }}</div>
+        <div class="muted-note mt-2">勤務開始〜終了の合計</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card page-card">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-xl-row justify-content-between gap-3 mb-3">
+      <div>
+        <h2 class="h5 mb-1">今日のタイムライン</h2>
+        <div class="muted-note">{{ today_date_label }} の確定シフトを閲覧専用で表示しています。</div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" href="{{ confirm_today_url }}">確定シフト管理へ</a>
+        <a class="btn btn-outline-dark" href="{{ daily_shift_url }}">1日シフト表へ</a>
+      </div>
+    </div>
+
+    {% if not today_timeline_shifts %}
+      <div class="alert alert-warning mb-0">
+        本日の確定シフトはまだありません。
+      </div>
+    {% else %}
+      <div class="timeline-scroll">
+        <div class="timeline-table" style="--timeline-slot-count: {{ timeline_slots|length }};">
+          <div class="d-flex align-items-end fw-semibold small border-bottom pb-1">
+            <div class="timeline-name pe-2">名前</div>
+            <div class="timeline-time pe-2">勤務開始</div>
+            <div class="timeline-time pe-2">勤務終了</div>
+            <div class="timeline-grid">
+              {% for slot in timeline_slots %}
+                <div class="timeline-header-slot timeline-hour-{{ 'even' if slot.hour_band % 2 == 0 else 'odd' }} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" style="width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px; min-width: {{ (((slot.end - slot.start) / 30) * 34)|round(2) }}px;">{{ slot.label }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          {% for shift in today_timeline_shifts %}
+            <div class="d-flex align-items-center timeline-row border-bottom py-2">
+              <div class="timeline-name pe-2 fw-semibold">{{ shift.name }}</div>
+              <div class="timeline-time pe-2">{{ shift.start_time }}</div>
+              <div class="timeline-time pe-2">{{ shift.end_time }}</div>
+              <div class="timeline-grid">
+                {% for cell in shift.cells %}
+                  <div class="timeline-slot timeline-hour-{{ 'even' if cell.hour_band % 2 == 0 else 'odd' }} {% if cell.active %}timeline-slot-active{% endif %} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" style="width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px; min-width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px;"></div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
