@@ -1,31 +1,42 @@
-from db import get_conn, get_table_columns, invalidate_table_columns_cache
+from threading import Lock
+
+from db import get_conn, get_table_columns_with_cursor, invalidate_table_columns_cache
 
 
 USER_ORDER_BY = "COALESCE(display_order, 999999) ASC, id ASC"
+_display_order_checked = False
+_display_order_lock = Lock()
 
 
 def ensure_user_display_order():
-    conn = get_conn()
-    try:
-        c = conn.cursor()
-        columns = get_table_columns("users")
-        if "display_order" not in columns:
-            c.execute("ALTER TABLE users ADD COLUMN display_order INTEGER")
-            invalidate_table_columns_cache("users")
-        rows = c.execute("""
-            SELECT id
-            FROM users
-            WHERE display_order IS NULL
-            ORDER BY id
-        """).fetchall()
-        next_order_row = c.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
-        next_order = int(next_order_row["next_order"] or 1)
-        for row in rows:
-            c.execute("UPDATE users SET display_order=? WHERE id=?", (next_order, row["id"]))
-            next_order += 1
-        conn.commit()
-    finally:
-        conn.close()
+    global _display_order_checked
+    if _display_order_checked:
+        return
+    with _display_order_lock:
+        if _display_order_checked:
+            return
+        conn = get_conn()
+        try:
+            c = conn.cursor()
+            columns = get_table_columns_with_cursor(c, "users")
+            if "display_order" not in columns:
+                c.execute("ALTER TABLE users ADD COLUMN display_order INTEGER")
+                invalidate_table_columns_cache("users")
+            rows = c.execute("""
+                SELECT id
+                FROM users
+                WHERE display_order IS NULL
+                ORDER BY id
+            """).fetchall()
+            next_order_row = c.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
+            next_order = int(next_order_row["next_order"] or 1)
+            for row in rows:
+                c.execute("UPDATE users SET display_order=? WHERE id=?", (next_order, row["id"]))
+                next_order += 1
+            conn.commit()
+            _display_order_checked = True
+        finally:
+            conn.close()
 
 
 def get_user_by_line_id(line_user_id: str):

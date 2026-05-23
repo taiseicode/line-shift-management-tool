@@ -9,6 +9,7 @@ _db_mode_logged = False
 _postgres_pool = None
 _postgres_pool_lock = Lock()
 _table_columns_cache = {}
+_table_columns_cache_lock = Lock()
 
 
 def using_postgres() -> bool:
@@ -81,33 +82,54 @@ class PostgresCursor:
         return iter(self._cursor)
 
 
-class PostgresConnection:
-    def __init__(self, pool_context, conn):
-        self._pool_context = pool_context
-        self._conn = conn
-        self._returned = False
-        self._committed = False
+class PooledConnection:
+    def __init__(self, pool):
+        self._ctx = pool.connection()
+        self._conn = self._ctx.__enter__()
+        self._closed = False
+        self._finished = False
 
     def cursor(self):
         return PostgresCursor(self._conn.cursor())
 
     def commit(self):
-        self._committed = True
+        self._finished = True
         return self._conn.commit()
 
     def rollback(self):
-        self._committed = True
+        self._finished = True
         return self._conn.rollback()
 
     def close(self):
-        if self._returned:
+        if self._closed:
             return
         try:
-            if not self._committed:
-                self._conn.rollback()
+            if not self._finished:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
         finally:
-            self._pool_context.__exit__(None, None, None)
-            self._returned = True
+            self._ctx.__exit__(None, None, None)
+            self._closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type:
+            try:
+                self._conn.rollback()
+                self._finished = True
+            except Exception:
+                pass
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 def _get_postgres_pool():
@@ -137,9 +159,7 @@ def _get_postgres_pool():
 def get_conn():
     _log_db_mode_once()
     if USE_POSTGRES:
-        pool_context = _get_postgres_pool().connection()
-        conn = pool_context.__enter__()
-        return PostgresConnection(pool_context, conn)
+        return PooledConnection(_get_postgres_pool())
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -148,8 +168,9 @@ def get_conn():
 
 def get_table_columns(table_name: str):
     cache_key = table_name.strip()
-    if cache_key in _table_columns_cache:
-        return list(_table_columns_cache[cache_key])
+    with _table_columns_cache_lock:
+        if cache_key in _table_columns_cache:
+            return list(_table_columns_cache[cache_key])
     conn = get_conn()
     try:
         c = conn.cursor()
@@ -167,17 +188,19 @@ def get_table_columns(table_name: str):
         else:
             rows = c.execute(f"PRAGMA table_info({table_name})").fetchall()
         columns = [row["name"] for row in rows]
-        _table_columns_cache[cache_key] = tuple(columns)
+        with _table_columns_cache_lock:
+            _table_columns_cache[cache_key] = tuple(columns)
         return columns
     finally:
         conn.close()
 
 
 def invalidate_table_columns_cache(table_name: str = None):
-    if table_name is None:
-        _table_columns_cache.clear()
-    else:
-        _table_columns_cache.pop(table_name.strip(), None)
+    with _table_columns_cache_lock:
+        if table_name is None:
+            _table_columns_cache.clear()
+        else:
+            _table_columns_cache.pop(table_name.strip(), None)
 
 
 def _get_table_columns_with_cursor(c, table_name: str):
@@ -195,6 +218,17 @@ def _get_table_columns_with_cursor(c, table_name: str):
     else:
         rows = c.execute(f"PRAGMA table_info({table_name})").fetchall()
     return [row["name"] for row in rows]
+
+
+def get_table_columns_with_cursor(c, table_name: str):
+    cache_key = table_name.strip()
+    with _table_columns_cache_lock:
+        if cache_key in _table_columns_cache:
+            return list(_table_columns_cache[cache_key])
+    columns = _get_table_columns_with_cursor(c, table_name)
+    with _table_columns_cache_lock:
+        _table_columns_cache[cache_key] = tuple(columns)
+    return columns
 
 
 def _ensure_user_display_order(c):
