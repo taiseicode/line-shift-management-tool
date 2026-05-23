@@ -449,13 +449,25 @@ def _build_confirmed_debug_details(line_user_id: str, user, confirmed_columns):
                     LIMIT 10
                 """, (resolved_user_id,)).fetchall()
             ]
+        if "line_user_id" in confirmed_columns:
+            line_count_row = c.execute(
+                "SELECT COUNT(*) AS count FROM confirmed_shifts WHERE line_user_id = ?",
+                (line_user_id,),
+            ).fetchone()
+        else:
+            line_count_row = c.execute("""
+                SELECT COUNT(*) AS count
+                FROM confirmed_shifts cs
+                JOIN users u ON u.id = cs.user_id
+                WHERE u.line_user_id = ?
+            """, (line_user_id,)).fetchone()
         return {
             "received_line_user_id": line_user_id,
             "resolved_user_id": resolved_user_id,
             "confirmed_table_columns": confirmed_columns,
             "confirmed_all_count_total": int(total_row["count"] or 0) if total_row else 0,
             "confirmed_count_for_user_id": count_for_user_id,
-            "confirmed_count_for_line_user_id": _count_confirmed_by_line_user_id(line_user_id, confirmed_columns),
+            "confirmed_count_for_line_user_id": int(line_count_row["count"] or 0) if line_count_row else 0,
             "confirmed_sample_rows": sample_rows,
         }
     finally:
@@ -469,24 +481,26 @@ def _build_my_confirmed_shift_payload(line_user_id: str, user, start_d, end_d, e
     entries = entries or {}
 
     confirmed_columns = _get_table_columns("confirmed_shifts")
-    debug_payload = {
-        "line_user_id": line_user_id,
-        "user_id": int(user["id"]) if user else None,
-        "start": start_ymd,
-        "end": end_ymd,
-        "range_count": 0,
-        "all_count": 0,
-        "table": "confirmed_shifts",
-        "sql": "",
-        "params": [],
-        "columns": confirmed_columns,
-        "raw_rows": [],
-        "all_sql": "",
-        "all_params": [],
-        "all_raw_rows_sample": [],
-        "upcoming_base": today_ymd,
-    }
-    debug_payload.update(_build_confirmed_debug_details(line_user_id, user, confirmed_columns))
+    debug_payload = None
+    if API_DEBUG_MODE:
+        debug_payload = {
+            "line_user_id": line_user_id,
+            "user_id": int(user["id"]) if user else None,
+            "start": start_ymd,
+            "end": end_ymd,
+            "range_count": 0,
+            "all_count": 0,
+            "table": "confirmed_shifts",
+            "sql": "",
+            "params": [],
+            "columns": confirmed_columns,
+            "raw_rows": [],
+            "all_sql": "",
+            "all_params": [],
+            "all_raw_rows_sample": [],
+            "upcoming_base": today_ymd,
+        }
+        debug_payload.update(_build_confirmed_debug_details(line_user_id, user, confirmed_columns))
 
     days = []
     for i in range((end_d - start_d).days + 1):
@@ -516,18 +530,19 @@ def _build_my_confirmed_shift_payload(line_user_id: str, user, start_d, end_d, e
     confirmed_all_query = _get_my_confirmed_decisions_all(int(user["id"]))
     decisions = {r["date"]: r for r in confirmed_query["rows"]}
 
-    debug_payload.update({
-        "sql": confirmed_query["sql"],
-        "params": confirmed_query["params"],
-        "columns": confirmed_query["columns"],
-        "range_count": confirmed_query["count"],
-        "count": confirmed_query["count"],
-        "raw_rows": confirmed_query["rows"],
-        "all_sql": confirmed_all_query["sql"],
-        "all_params": confirmed_all_query["params"],
-        "all_count": confirmed_all_query["count"],
-        "all_raw_rows_sample": confirmed_all_query["rows"][:5],
-    })
+    if API_DEBUG_MODE and debug_payload is not None:
+        debug_payload.update({
+            "sql": confirmed_query["sql"],
+            "params": confirmed_query["params"],
+            "columns": confirmed_query["columns"],
+            "range_count": confirmed_query["count"],
+            "count": confirmed_query["count"],
+            "raw_rows": confirmed_query["rows"],
+            "all_sql": confirmed_all_query["sql"],
+            "all_params": confirmed_all_query["params"],
+            "all_count": confirmed_all_query["count"],
+            "all_raw_rows_sample": confirmed_all_query["rows"][:5],
+        })
 
     all_shifts = [
         _confirmed_decision_to_item(decision)
