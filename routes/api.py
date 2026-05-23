@@ -3,11 +3,11 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from db import get_conn, get_table_columns, using_postgres
+from db import get_conn, get_table_columns, invalidate_table_columns_cache, using_postgres
 from repositories.shift_repository import get_my_entries_range, upsert_shift_entry, delete_entry
 from repositories.user_repository import get_user_by_line_id, upsert_user
 from services.auth_service import require_verified_line_claims, reject_if_user_inactive, verify_line_id_token
-from services.deadline_service import build_deadline_status_payload, reject_if_submission_closed_for_date
+from services.deadline_service import build_deadline_status_payload, get_active_deadline_config, reject_if_submission_closed_for_date
 from utils import parse_ymd, to_ymd, is_valid_time_hhmm, hhmm_to_minutes
 
 
@@ -171,20 +171,30 @@ def _ensure_user_pay_settings_table():
             c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS overtime_enabled INTEGER NOT NULL DEFAULT 1")
             c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS created_at TEXT")
             c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS updated_at TEXT")
+            invalidate_table_columns_cache("user_pay_settings")
         else:
             columns = get_table_columns("user_pay_settings")
+            schema_changed = False
             if "hourly_wage" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN hourly_wage INTEGER")
+                schema_changed = True
             if "break_rule" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN break_rule TEXT NOT NULL DEFAULT 'legal_jp'")
+                schema_changed = True
             if "night_enabled" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN night_enabled INTEGER NOT NULL DEFAULT 1")
+                schema_changed = True
             if "overtime_enabled" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN overtime_enabled INTEGER NOT NULL DEFAULT 1")
+                schema_changed = True
             if "created_at" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN created_at TEXT")
+                schema_changed = True
             if "updated_at" not in columns:
                 c.execute("ALTER TABLE user_pay_settings ADD COLUMN updated_at TEXT")
+                schema_changed = True
+            if schema_changed:
+                invalidate_table_columns_cache("user_pay_settings")
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         c.execute("UPDATE user_pay_settings SET break_rule = 'legal_jp' WHERE break_rule IS NULL OR break_rule = '' OR break_rule = 'over_6h_1h'")
         c.execute("UPDATE user_pay_settings SET night_enabled = 1 WHERE night_enabled IS NULL")
@@ -679,10 +689,11 @@ def api_my_week():
 
     entries = {}
     deadline_statuses = {}
+    active_deadline_config = get_active_deadline_config()
     for i in range(7):
         d = start_d + timedelta(days=i)
         entries[to_ymd(d)] = None
-        deadline_statuses[to_ymd(d)] = build_deadline_status_payload(d)
+        deadline_statuses[to_ymd(d)] = build_deadline_status_payload(d, active_config=active_deadline_config)
 
     for r in rows:
         entries[r["date"]] = {

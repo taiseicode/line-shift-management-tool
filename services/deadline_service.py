@@ -265,8 +265,8 @@ def get_active_deadline_config():
         "display": "未設定",
     }
 
-def get_submission_deadline_status(shift_date_obj=None, now=None):
-    active_config = get_active_deadline_config()
+def get_submission_deadline_status(shift_date_obj=None, now=None, active_config=None):
+    active_config = active_config or get_active_deadline_config()
     current = now or datetime.now()
     mode = active_config["mode"]
     deadline = None
@@ -308,8 +308,8 @@ def get_submission_deadline_status(shift_date_obj=None, now=None):
         "monthly_time": active_config["monthly_time"],
     }
 
-def build_deadline_status_payload(shift_date_obj: date):
-    status = get_submission_deadline_status(shift_date_obj=shift_date_obj)
+def build_deadline_status_payload(shift_date_obj: date, active_config=None):
+    status = get_submission_deadline_status(shift_date_obj=shift_date_obj, active_config=active_config)
     return {
         "is_closed": status["is_closed"],
         "message": status["message"],

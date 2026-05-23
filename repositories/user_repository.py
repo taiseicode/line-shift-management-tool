@@ -1,4 +1,4 @@
-from db import get_conn, get_table_columns
+from db import get_conn, get_table_columns, invalidate_table_columns_cache
 
 
 USER_ORDER_BY = "COALESCE(display_order, 999999) ASC, id ASC"
@@ -11,6 +11,7 @@ def ensure_user_display_order():
         columns = get_table_columns("users")
         if "display_order" not in columns:
             c.execute("ALTER TABLE users ADD COLUMN display_order INTEGER")
+            invalidate_table_columns_cache("users")
         rows = c.execute("""
             SELECT id
             FROM users

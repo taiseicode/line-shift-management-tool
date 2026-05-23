@@ -1,10 +1,14 @@
 import sqlite3
+from threading import Lock
 
 from config import DATABASE_URL, DB_PATH
 
 
 USE_POSTGRES = bool(DATABASE_URL)
 _db_mode_logged = False
+_postgres_pool = None
+_postgres_pool_lock = Lock()
+_table_columns_cache = {}
 
 
 def using_postgres() -> bool:
@@ -78,32 +82,64 @@ class PostgresCursor:
 
 
 class PostgresConnection:
-    def __init__(self, conn):
+    def __init__(self, pool_context, conn):
+        self._pool_context = pool_context
         self._conn = conn
+        self._returned = False
+        self._committed = False
 
     def cursor(self):
         return PostgresCursor(self._conn.cursor())
 
     def commit(self):
+        self._committed = True
         return self._conn.commit()
 
     def rollback(self):
+        self._committed = True
         return self._conn.rollback()
 
     def close(self):
-        return self._conn.close()
+        if self._returned:
+            return
+        try:
+            if not self._committed:
+                self._conn.rollback()
+        finally:
+            self._pool_context.__exit__(None, None, None)
+            self._returned = True
+
+
+def _get_postgres_pool():
+    global _postgres_pool
+    if _postgres_pool is not None:
+        return _postgres_pool
+    with _postgres_pool_lock:
+        if _postgres_pool is not None:
+            return _postgres_pool
+        try:
+            from psycopg.rows import dict_row
+            from psycopg_pool import ConnectionPool
+        except ImportError as exc:
+            raise RuntimeError("DATABASE_URL is set, but psycopg pool support is not installed") from exc
+        _postgres_pool = ConnectionPool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=3,
+            timeout=10,
+            kwargs={"row_factory": dict_row},
+            open=True,
+        )
+        _postgres_pool.wait(timeout=10)
+        return _postgres_pool
 
 
 def get_conn():
     _log_db_mode_once()
     if USE_POSTGRES:
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ImportError as exc:
-            raise RuntimeError("DATABASE_URL is set, but psycopg is not installed") from exc
-        conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
-        return PostgresConnection(conn)
+        pool_context = _get_postgres_pool().connection()
+        conn = pool_context.__enter__()
+        return PostgresConnection(pool_context, conn)
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -111,6 +147,9 @@ def get_conn():
 
 
 def get_table_columns(table_name: str):
+    cache_key = table_name.strip()
+    if cache_key in _table_columns_cache:
+        return list(_table_columns_cache[cache_key])
     conn = get_conn()
     try:
         c = conn.cursor()
@@ -127,9 +166,18 @@ def get_table_columns(table_name: str):
             ).fetchall()
         else:
             rows = c.execute(f"PRAGMA table_info({table_name})").fetchall()
-        return [row["name"] for row in rows]
+        columns = [row["name"] for row in rows]
+        _table_columns_cache[cache_key] = tuple(columns)
+        return columns
     finally:
         conn.close()
+
+
+def invalidate_table_columns_cache(table_name: str = None):
+    if table_name is None:
+        _table_columns_cache.clear()
+    else:
+        _table_columns_cache.pop(table_name.strip(), None)
 
 
 def _get_table_columns_with_cursor(c, table_name: str):
@@ -325,6 +373,7 @@ def _init_postgres_tables(c):
 
 
 def init_tables():
+    invalidate_table_columns_cache()
     conn = get_conn()
     try:
         c = conn.cursor()
@@ -335,3 +384,4 @@ def init_tables():
         conn.commit()
     finally:
         conn.close()
+    invalidate_table_columns_cache()
