@@ -1,4 +1,4 @@
-from db import get_conn
+from db import get_conn, get_table_columns
 
 
 USER_ORDER_BY = "COALESCE(display_order, 999999) ASC, id ASC"
@@ -8,7 +8,7 @@ def ensure_user_display_order():
     conn = get_conn()
     try:
         c = conn.cursor()
-        columns = [row["name"] for row in c.execute("PRAGMA table_info(users)").fetchall()]
+        columns = get_table_columns("users")
         if "display_order" not in columns:
             c.execute("ALTER TABLE users ADD COLUMN display_order INTEGER")
         rows = c.execute("""
@@ -66,10 +66,11 @@ def upsert_user(line_user_id: str, name: str):
         c = conn.cursor()
         next_order_row = c.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
         next_order = int(next_order_row["next_order"] or 1)
-        c.execute(
-            "INSERT OR IGNORE INTO users(line_user_id, name, display_order) VALUES(?, ?, ?)",
-            (line_user_id, name, next_order),
-        )
+        c.execute("""
+            INSERT INTO users(line_user_id, name, display_order)
+            VALUES(?, ?, ?)
+            ON CONFLICT(line_user_id) DO NOTHING
+        """, (line_user_id, name, next_order))
         c.execute("UPDATE users SET name=? WHERE line_user_id=?", (name, line_user_id))
         c.execute("UPDATE users SET display_order=? WHERE line_user_id=? AND display_order IS NULL", (next_order, line_user_id))
         conn.commit()

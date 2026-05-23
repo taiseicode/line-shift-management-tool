@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "shift.db")
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "5000"))
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-this-super-secret-key")

@@ -1,11 +1,13 @@
 from datetime import datetime
 
-from db import get_conn
+from db import get_conn, using_postgres
 
 USER_ORDER_SQL = "COALESCE(u.display_order, 999999), u.id"
 
 
 def _empty_time_value_for_confirmed_shifts():
+    if using_postgres():
+        return None
     conn = get_conn()
     try:
         c = conn.cursor()

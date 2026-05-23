@@ -3,8 +3,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from config import DB_PATH
-from db import get_conn
+from db import get_conn, get_table_columns, using_postgres
 from repositories.shift_repository import get_my_entries_range, upsert_shift_entry, delete_entry
 from repositories.user_repository import get_user_by_line_id, upsert_user
 from services.auth_service import require_verified_line_claims, reject_if_user_inactive, verify_line_id_token
@@ -36,12 +35,7 @@ def _row_to_dict(row):
 
 
 def _get_table_columns(table_name: str):
-    conn = get_conn()
-    try:
-        c = conn.cursor()
-        return [row["name"] for row in c.execute(f"PRAGMA table_info({table_name})").fetchall()]
-    finally:
-        conn.close()
+    return get_table_columns(table_name)
 
 
 def _get_my_confirmed_decisions(user_id: int, start_ymd: str, end_ymd: str):
@@ -145,31 +139,52 @@ def _ensure_user_pay_settings_table():
     conn = get_conn()
     try:
         c = conn.cursor()
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS user_pay_settings (
-                user_id INTEGER PRIMARY KEY,
-                hourly_wage INTEGER,
-                break_rule TEXT NOT NULL DEFAULT 'legal_jp',
-                night_enabled INTEGER NOT NULL DEFAULT 1,
-                overtime_enabled INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-        """)
-        columns = [row["name"] for row in c.execute("PRAGMA table_info(user_pay_settings)").fetchall()]
-        if "hourly_wage" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN hourly_wage INTEGER")
-        if "break_rule" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN break_rule TEXT NOT NULL DEFAULT 'legal_jp'")
-        if "night_enabled" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN night_enabled INTEGER NOT NULL DEFAULT 1")
-        if "overtime_enabled" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN overtime_enabled INTEGER NOT NULL DEFAULT 1")
-        if "created_at" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN created_at TEXT")
-        if "updated_at" not in columns:
-            c.execute("ALTER TABLE user_pay_settings ADD COLUMN updated_at TEXT")
+        if using_postgres():
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS user_pay_settings (
+                    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+                    hourly_wage INTEGER,
+                    break_rule TEXT NOT NULL DEFAULT 'legal_jp',
+                    night_enabled INTEGER NOT NULL DEFAULT 1,
+                    overtime_enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+        else:
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS user_pay_settings (
+                    user_id INTEGER PRIMARY KEY,
+                    hourly_wage INTEGER,
+                    break_rule TEXT NOT NULL DEFAULT 'legal_jp',
+                    night_enabled INTEGER NOT NULL DEFAULT 1,
+                    overtime_enabled INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """)
+        if using_postgres():
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS hourly_wage INTEGER")
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS break_rule TEXT NOT NULL DEFAULT 'legal_jp'")
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS night_enabled INTEGER NOT NULL DEFAULT 1")
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS overtime_enabled INTEGER NOT NULL DEFAULT 1")
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS created_at TEXT")
+            c.execute("ALTER TABLE user_pay_settings ADD COLUMN IF NOT EXISTS updated_at TEXT")
+        else:
+            columns = get_table_columns("user_pay_settings")
+            if "hourly_wage" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN hourly_wage INTEGER")
+            if "break_rule" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN break_rule TEXT NOT NULL DEFAULT 'legal_jp'")
+            if "night_enabled" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN night_enabled INTEGER NOT NULL DEFAULT 1")
+            if "overtime_enabled" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN overtime_enabled INTEGER NOT NULL DEFAULT 1")
+            if "created_at" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN created_at TEXT")
+            if "updated_at" not in columns:
+                c.execute("ALTER TABLE user_pay_settings ADD COLUMN updated_at TEXT")
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         c.execute("UPDATE user_pay_settings SET break_rule = 'legal_jp' WHERE break_rule IS NULL OR break_rule = '' OR break_rule = 'over_6h_1h'")
         c.execute("UPDATE user_pay_settings SET night_enabled = 1 WHERE night_enabled IS NULL")
