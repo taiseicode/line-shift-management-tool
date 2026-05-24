@@ -40,7 +40,14 @@
 
 <div class="card page-card mb-4">
   <div class="card-body">
-    <h2 class="h5 mb-3">タイムライン表示時間</h2>
+    <h2 class="h5 mb-2">タイムライン表示時間</h2>
+    <div class="muted-note mb-3">
+      {% if daily_shift_graph_range_is_saved %}
+        この日の保存済み表示時間を使用しています。
+      {% else %}
+        確定シフトに合わせて表示時間を自動調整しています。
+      {% endif %}
+    </div>
     <form method="POST" action="/admin/daily-shift/settings" class="row g-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
       <input type="hidden" name="target_date" value="{{ target_date_value }}">
@@ -62,8 +69,11 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-4 d-flex align-items-end">
+      <div class="col-md-2 d-flex align-items-end">
         <button type="submit" class="btn btn-outline-dark w-100">表示時間を保存</button>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-secondary w-100" name="action" value="reset_auto">自動調整に戻す</button>
       </div>
     </form>
   </div>

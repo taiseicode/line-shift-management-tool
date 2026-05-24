@@ -23,7 +23,7 @@ from repositories.confirmed_shift_repository import (
     upsert_confirmed_shift,
 )
 from repositories.required_staff_repository import upsert_required_staff, get_required_staff_range
-from repositories.settings_repository import get_setting, upsert_setting
+from repositories.settings_repository import delete_setting, get_setting, upsert_setting
 from repositories.shift_repository import (
     get_entries_range,
     get_shift_entry_by_id,
@@ -90,6 +90,7 @@ admin_bp = Blueprint("admin", __name__)
 
 DAILY_SHIFT_GRAPH_START_TIME_KEY = "DAILY_SHIFT_GRAPH_START_TIME"
 DAILY_SHIFT_GRAPH_END_TIME_KEY = "DAILY_SHIFT_GRAPH_END_TIME"
+DAILY_SHIFT_GRAPH_RANGE_KEY_PREFIX = "DAILY_SHIFT_GRAPH_RANGE_"
 DEFAULT_DAILY_SHIFT_GRAPH_START_TIME = "08:00"
 DEFAULT_DAILY_SHIFT_GRAPH_END_TIME = "23:00"
 
@@ -462,6 +463,61 @@ def get_daily_shift_graph_end_time():
     return value if is_valid_time_hhmm(value) else DEFAULT_DAILY_SHIFT_GRAPH_END_TIME
 
 
+def _daily_shift_graph_range_key(date_value: str) -> str:
+    return f"{DAILY_SHIFT_GRAPH_RANGE_KEY_PREFIX}{date_value}"
+
+
+def _minutes_to_hhmm(minutes: int) -> str:
+    normalized = int(minutes) % (24 * 60)
+    return f"{normalized // 60:02d}:{normalized % 60:02d}"
+
+
+def _get_saved_daily_shift_graph_range(date_value: str):
+    raw_value = (get_setting(_daily_shift_graph_range_key(date_value)) or "").strip()
+    if not raw_value or "|" not in raw_value:
+        return None
+    start_time, end_time = [part.strip() for part in raw_value.split("|", 1)]
+    if not is_valid_time_hhmm(start_time) or not is_valid_time_hhmm(end_time):
+        return None
+    minutes_range = _time_range_minutes(start_time, end_time)
+    if not minutes_range or minutes_range[1] - minutes_range[0] > 24 * 60:
+        return None
+    return start_time, end_time
+
+
+def _auto_daily_shift_graph_range(confirmed_shifts):
+    earliest_start = None
+    latest_end = None
+    for shift in confirmed_shifts:
+        start_minutes = _time_to_minutes(shift["start_time"] or "")
+        end_minutes = _time_to_minutes(shift["end_time"] or "")
+        if start_minutes is None or end_minutes is None:
+            continue
+        if end_minutes <= start_minutes:
+            end_minutes += 24 * 60
+        earliest_start = start_minutes if earliest_start is None else min(earliest_start, start_minutes)
+        latest_end = end_minutes if latest_end is None else max(latest_end, end_minutes)
+    if earliest_start is None or latest_end is None:
+        return get_daily_shift_graph_start_time(), get_daily_shift_graph_end_time()
+    return _minutes_to_hhmm(earliest_start - 60), _minutes_to_hhmm(latest_end + 60)
+
+
+def get_daily_shift_graph_range_for_date(date_value: str, confirmed_shifts):
+    saved_range = _get_saved_daily_shift_graph_range(date_value)
+    if saved_range:
+        return {
+            "start_time": saved_range[0],
+            "end_time": saved_range[1],
+            "is_saved": True,
+        }
+    start_time, end_time = _auto_daily_shift_graph_range(confirmed_shifts)
+    return {
+        "start_time": start_time,
+        "end_time": end_time,
+        "is_saved": False,
+    }
+
+
 def _time_range_minutes(start_time: str, end_time: str):
     start_minutes = _time_to_minutes(start_time)
     end_minutes = _time_to_minutes(end_time)
@@ -675,11 +731,13 @@ def _build_daily_shift_page_context():
         for hour in range(24)
         for minute in (0, 15, 30, 45)
     ]
-    ctx["daily_shift_graph_start_time"] = get_daily_shift_graph_start_time()
-    ctx["daily_shift_graph_end_time"] = get_daily_shift_graph_end_time()
-    ctx["timeline_slots"] = _build_timeline_slots(ctx["daily_shift_graph_start_time"], ctx["daily_shift_graph_end_time"])
     active_users = [user for user in get_all_users(include_inactive=False) if int(user["active"]) == 1]
     confirmed_shifts = get_confirmed_shifts_by_date(target_value)
+    graph_range = get_daily_shift_graph_range_for_date(target_value, confirmed_shifts)
+    ctx["daily_shift_graph_start_time"] = graph_range["start_time"]
+    ctx["daily_shift_graph_end_time"] = graph_range["end_time"]
+    ctx["daily_shift_graph_range_is_saved"] = graph_range["is_saved"]
+    ctx["timeline_slots"] = _build_timeline_slots(ctx["daily_shift_graph_start_time"], ctx["daily_shift_graph_end_time"])
     confirmed_user_ids = {int(shift["user_id"]) for shift in confirmed_shifts}
     ctx["active_users"] = [
         {
@@ -844,6 +902,26 @@ def admin_save_daily_shift_sheet_settings():
     start_time = (request.form.get("daily_shift_graph_start_time") or "").strip()
     end_time = (request.form.get("daily_shift_graph_end_time") or "").strip()
     daily_shift_date = (request.form.get("daily_shift_date") or request.form.get("target_date") or "").strip()
+    reset_to_auto = (request.form.get("action") or "").strip() == "reset_auto"
+    if daily_shift_date and not parse_ymd(daily_shift_date):
+        return "1日シフト表の対象日が不正です", 400
+    if reset_to_auto:
+        if daily_shift_date:
+            delete_setting(_daily_shift_graph_range_key(daily_shift_date))
+            session["daily_shift_date"] = daily_shift_date
+        next_page = (request.form.get("next_page") or "").strip()
+        target_path = next_page if next_page in {"/admin", "/admin/confirm", "/admin/daily-shift"} else "/admin/confirm"
+        params = {}
+        for key in ("start", "end", "confirm_date"):
+            value = (request.form.get(key) or "").strip()
+            if value:
+                params[key] = value
+        if daily_shift_date:
+            params["daily_shift_date"] = daily_shift_date
+            if target_path == "/admin/daily-shift":
+                params["target_date"] = daily_shift_date
+        query = urlencode(params)
+        return redirect(f"{target_path}?{query}" if query else target_path)
     if not is_valid_time_hhmm(start_time) or not is_valid_time_hhmm(end_time):
         return "表示開始時間 / 表示終了時間が不正です", 400
 
@@ -857,10 +935,12 @@ def admin_save_daily_shift_sheet_settings():
     if end_minutes - start_minutes > 24 * 60:
         return "表示範囲は最大24時間以内にしてください", 400
 
-    upsert_setting(DAILY_SHIFT_GRAPH_START_TIME_KEY, start_time)
-    upsert_setting(DAILY_SHIFT_GRAPH_END_TIME_KEY, end_time)
     if daily_shift_date:
+        upsert_setting(_daily_shift_graph_range_key(daily_shift_date), f"{start_time}|{end_time}")
         session["daily_shift_date"] = daily_shift_date
+    else:
+        upsert_setting(DAILY_SHIFT_GRAPH_START_TIME_KEY, start_time)
+        upsert_setting(DAILY_SHIFT_GRAPH_END_TIME_KEY, end_time)
 
     next_page = (request.form.get("next_page") or "").strip()
     target_path = next_page if next_page in {"/admin", "/admin/confirm", "/admin/daily-shift"} else "/admin/confirm"
@@ -951,8 +1031,6 @@ def admin_save_timeline_shifts():
             is_assigned=1,
         )
 
-    upsert_setting(DAILY_SHIFT_GRAPH_START_TIME_KEY, graph_start_time)
-    upsert_setting(DAILY_SHIFT_GRAPH_END_TIME_KEY, graph_end_time)
     return _redirect_to_admin_page(default_path="/admin/confirm", include_confirm_date=True)
 
 
@@ -2366,8 +2444,9 @@ def admin_export_daily_shift_sheet():
     confirmed_rows = get_confirmed_shifts_by_date(ymd)
     active_users = get_all_users(include_inactive=False)
     user_names = [user["name"] or "" for user in active_users if int(user["active"]) == 1 and (user["name"] or "")]
-    graph_start_time = get_daily_shift_graph_start_time()
-    graph_end_time = get_daily_shift_graph_end_time()
+    graph_range = get_daily_shift_graph_range_for_date(ymd, confirmed_rows)
+    graph_start_time = graph_range["start_time"]
+    graph_end_time = graph_range["end_time"]
     minutes_range = _time_range_minutes(graph_start_time, graph_end_time)
     if not minutes_range:
         return "\u8868\u793a\u958b\u59cb\u6642\u9593 / \u8868\u793a\u7d42\u4e86\u6642\u9593\u304c\u4e0d\u6b63\u3067\u3059", 400
