@@ -390,7 +390,7 @@ def liff_submit():
       margin-bottom: 3px;
     }}
     .pay-summary-value {{ font-size: 0.98rem; font-weight: 700; }}
-    .pay-amount {{ font-size: 1.4rem; font-weight: 800; letter-spacing: 0; }}
+    .pay-amount {{ font-size: 1.75rem; font-weight: 800; letter-spacing: 0; }}
     @media (max-width: 575.98px) {{
       .hero-panel {{
         padding: 18px 16px 16px;
@@ -589,6 +589,9 @@ let confirmedHistoryWeekStart = "";
 let paySummaryMonth = "";
 let paySettings = null;
 let paySummary = null;
+let paySummaryCache = {{}};
+let paySummaryCacheToken = 0;
+let paySummaryRequestId = 0;
 let modal = null;
 let paySettingsModal = null;
 
@@ -1045,6 +1048,11 @@ function formatMinutes(totalMinutes) {{
   return minutesPart ? `${{hours}}\u6642\u9593${{minutesPart}}\u5206` : `${{hours}}\u6642\u9593`;
 }}
 
+function formatHoursDecimal(totalMinutes) {{
+  const hours = Number(totalMinutes || 0) / 60;
+  return `${{Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}}\u6642\u9593`;
+}}
+
 function formatCurrency(value) {{
   if (value === null || value === undefined || value === "") return "";
   return `${{Number(value).toLocaleString("ja-JP")}}\u5186`;
@@ -1143,7 +1151,15 @@ async function fetchPaySettings(options = {{}}) {{
 async function fetchPaySummary(options = {{}}) {{
   const month = normalizeMonthValue(options.month || paySummaryMonth || currentMonthValue());
   paySummaryMonth = month;
-  return await apiGetPaySummary(month);
+  if (!options.force && paySummaryCache[month]) {{
+    return paySummaryCache[month];
+  }}
+  const cacheToken = paySummaryCacheToken;
+  const data = await apiGetPaySummary(month);
+  if (cacheToken === paySummaryCacheToken) {{
+    paySummaryCache[month] = data;
+  }}
+  return data;
 }}
 
 async function apiGetPaySummary(monthValue) {{
@@ -1167,35 +1183,68 @@ function renderPaySummary(summary) {{
   const hourlyWage = hasHourlyWage(summary.hourly_wage) ? Number(summary.hourly_wage) : summarySettings.hourly_wage;
   renderPaySettings(summarySettings);
   document.getElementById("paySummaryMonth").textContent = `\u5bfe\u8c61\u6708: ${{summary.month || paySummaryMonth}}`;
-  document.getElementById("paySummaryMessage").textContent = hasHourlyWage(hourlyWage) ? "\u6982\u7b97\u306e\u898b\u8fbc\u307f\u91d1\u984d\u3067\u3059" : "\u6642\u7d66\u3092\u8a2d\u5b9a\u3059\u308b\u3068\u898b\u8fbc\u307f\u7d66\u6599\u3092\u8868\u793a\u3067\u304d\u307e\u3059";
-  document.getElementById("paySummaryAmount").textContent = summary.estimated_pay === null || summary.estimated_pay === undefined ? "" : formatCurrency(summary.estimated_pay);
+  const confirmedCount = Number(summary.confirmed_shift_count || 0);
+  const estimatedPay = summary.estimated_pay;
+  if (!hasHourlyWage(hourlyWage)) {{
+    document.getElementById("paySummaryMessage").textContent = "\u6642\u7d66\u3092\u8a2d\u5b9a\u3059\u308b\u3068\u898b\u8fbc\u307f\u7d66\u6599\u3092\u8868\u793a\u3067\u304d\u307e\u3059";
+    document.getElementById("paySummaryAmount").textContent = "";
+  }} else if (confirmedCount === 0) {{
+    document.getElementById("paySummaryMessage").textContent = "\u78ba\u5b9a\u30b7\u30d5\u30c8\u672a\u767b\u9332";
+    document.getElementById("paySummaryAmount").textContent = "0\u5186";
+  }} else {{
+    document.getElementById("paySummaryMessage").textContent = "\u6982\u7b97\u306e\u898b\u8fbc\u307f\u91d1\u984d\u3067\u3059";
+    document.getElementById("paySummaryAmount").textContent = estimatedPay === null || estimatedPay === undefined ? "" : formatCurrency(estimatedPay);
+  }}
   document.getElementById("paySummaryGrid").innerHTML = `
-    <div class="pay-summary-item"><div class="pay-summary-label">\u57fa\u672c\u6642\u7d66</div><div class="pay-summary-value">${{hasHourlyWage(hourlyWage) ? formatCurrency(hourlyWage) : "\u672a\u8a2d\u5b9a"}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u4f11\u61a9\u30eb\u30fc\u30eb</div><div class="pay-summary-value">${{breakRuleLabel(summarySettings.break_rule)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u6df1\u591c\u624b\u5f53</div><div class="pay-summary-value">${{onOffLabel(summarySettings.night_enabled)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">8\u6642\u9593\u8d85\u904e\u624b\u5f53</div><div class="pay-summary-value">${{onOffLabel(summarySettings.overtime_enabled)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u78ba\u5b9a\u30b7\u30d5\u30c8\u6570</div><div class="pay-summary-value">${{summary.confirmed_shift_count || 0}}\u4ef6</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u5b9f\u52b4\u50cd\u6642\u9593</div><div class="pay-summary-value">${{formatMinutes(summary.paid_work_minutes)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u4f11\u61a9\u6642\u9593</div><div class="pay-summary-value">${{formatMinutes(summary.break_minutes)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u6b8b\u696d\u6642\u9593</div><div class="pay-summary-value">${{formatMinutes(summary.overtime_minutes)}}</div></div>
-    <div class="pay-summary-item"><div class="pay-summary-label">\u6df1\u591c\u6642\u9593</div><div class="pay-summary-value">${{formatMinutes(summary.night_minutes)}}</div></div>
+    <div class="pay-summary-item"><div class="pay-summary-label">\u78ba\u5b9a\u30b7\u30d5\u30c8\u6570</div><div class="pay-summary-value">${{confirmedCount}}\u4ef6</div></div>
+    <div class="pay-summary-item"><div class="pay-summary-label">\u5b9f\u52b4\u50cd\u6642\u9593</div><div class="pay-summary-value">${{formatHoursDecimal(summary.paid_work_minutes)}}</div></div>
   `;
 }}
 
-async function loadPaySummary() {{
-  paySummaryMonth = normalizeMonthValue(paySummaryMonth);
-  document.getElementById("paySummaryMonth").textContent = `\u5bfe\u8c61\u6708: ${{paySummaryMonth}}`;
-  try {{
-    const settingsJson = await fetchPaySettings({{ force: true }});
-    renderPaySettings(settingsJson.settings);
-    const summaryJson = await fetchPaySummary({{ force: true, month: paySummaryMonth }});
-    paySummary = summaryJson;
-    renderPaySummary(paySummary);
-  }} catch (e) {{
-    console.error("[LIFF pay] loadPaySummary failed", e);
-    document.getElementById("paySummaryMessage").textContent = e.message || "\u898b\u8fbc\u307f\u7d66\u6599\u306e\u53d6\u5f97\u306b\u5931\u6557\u3057\u307e\u3057\u305f";
+function renderPaySummaryLoading(month, mode = "initial") {{
+  document.getElementById("paySummaryMonth").textContent = `\u5bfe\u8c61\u6708: ${{month}}`;
+  document.getElementById("paySummaryMessage").textContent = mode === "update" ? "\u66f4\u65b0\u4e2d..." : "\u8a08\u7b97\u4e2d...";
+  if (!paySummary) {{
     document.getElementById("paySummaryAmount").textContent = "";
     document.getElementById("paySummaryGrid").innerHTML = "";
+  }}
+}}
+
+function renderPaySummaryFailure(month, message) {{
+  document.getElementById("paySummaryMonth").textContent = `\u5bfe\u8c61\u6708: ${{month}}`;
+  document.getElementById("paySummaryMessage").textContent = message || "\u53d6\u5f97\u5931\u6557";
+  if (!paySummary) {{
+    document.getElementById("paySummaryAmount").textContent = "";
+    document.getElementById("paySummaryGrid").innerHTML = "";
+  }}
+}}
+
+async function loadPaySummary(options = {{}}) {{
+  const month = normalizeMonthValue(options.month || paySummaryMonth);
+  paySummaryMonth = month;
+  const requestId = ++paySummaryRequestId;
+  const cached = !options.force && paySummaryCache[month];
+  if (cached) {{
+    paySummary = cached;
+    renderPaySummary(cached);
+    return cached;
+  }}
+
+  renderPaySummaryLoading(month, paySummary ? "update" : "initial");
+  try {{
+    const settingsJson = await fetchPaySettings({{ force: true }});
+    if (requestId !== paySummaryRequestId) return null;
+    renderPaySettings(settingsJson.settings);
+    const summaryJson = await fetchPaySummary({{ force: !!options.force, month }});
+    if (requestId !== paySummaryRequestId) return null;
+    paySummary = summaryJson;
+    renderPaySummary(paySummary);
+    return paySummary;
+  }} catch (e) {{
+    if (requestId !== paySummaryRequestId) return null;
+    console.error("[LIFF pay] loadPaySummary failed", e);
+    renderPaySummaryFailure(month, "\u53d6\u5f97\u5931\u6557");
+    return null;
   }}
 }}
 
@@ -1236,12 +1285,12 @@ async function savePaySettings() {{
 
     const settingsJson = await fetchPaySettings({{ force: true }});
     paySummaryMonth = normalizeMonthValue(paySummaryMonth || currentMonthValue());
-    const summaryJson = await fetchPaySummary({{ force: true, month: paySummaryMonth }});
+    paySummaryCacheToken += 1;
+    paySummaryCache = {{}};
 
     paySettings = settingsJson.settings;
-    paySummary = summaryJson;
     renderPaySettings(paySettings);
-    renderPaySummary(paySummary);
+    await loadPaySummary({{ force: true, month: paySummaryMonth }});
 
     const reloadedMatches = Number(paySettings.hourly_wage) === hourlyWage
       && paySettings.break_rule === (payload.break_rule === "over_6h_1h" ? "legal_jp" : payload.break_rule)
