@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from repositories.confirmed_shift_repository import get_confirmed_shifts_range
-from repositories.settings_repository import get_setting, upsert_setting
+from repositories.settings_repository import get_settings, upsert_setting
 
 
 DEFAULT_HOURLY_WAGE = 1210
@@ -11,8 +11,17 @@ OVERTIME_ENABLED_KEY = "OVERTIME_ENABLED"
 NIGHT_ENABLED_KEY = "NIGHT_ENABLED"
 
 
-def _get_bool_setting(key: str, default: bool = True) -> bool:
-    raw_value = get_setting(key)
+LABOR_SETTING_KEYS = (
+    BASE_HOURLY_WAGE_KEY,
+    "hourly_wage",
+    BREAK_ENABLED_KEY,
+    OVERTIME_ENABLED_KEY,
+    NIGHT_ENABLED_KEY,
+)
+
+
+def _get_bool_setting(settings_values, key: str, default: bool = True) -> bool:
+    raw_value = settings_values.get(key)
     if raw_value is None:
         return default
     return str(raw_value).strip().lower() == "true"
@@ -22,10 +31,13 @@ def _set_bool_setting(key: str, value: bool):
     upsert_setting(key, "true" if value else "false")
 
 
-def get_labor_settings():
-    raw_value = get_setting(BASE_HOURLY_WAGE_KEY)
+def get_labor_settings(settings_values=None):
+    if settings_values is None:
+        settings_values = get_settings(LABOR_SETTING_KEYS)
+
+    raw_value = settings_values.get(BASE_HOURLY_WAGE_KEY)
     if raw_value is None:
-        raw_value = get_setting("hourly_wage")
+        raw_value = settings_values.get("hourly_wage")
 
     try:
         base_hourly_wage = int(raw_value) if raw_value is not None else DEFAULT_HOURLY_WAGE
@@ -34,9 +46,9 @@ def get_labor_settings():
 
     return {
         "base_hourly_wage": base_hourly_wage,
-        "break_enabled": _get_bool_setting(BREAK_ENABLED_KEY, True),
-        "overtime_enabled": _get_bool_setting(OVERTIME_ENABLED_KEY, True),
-        "night_enabled": _get_bool_setting(NIGHT_ENABLED_KEY, True),
+        "break_enabled": _get_bool_setting(settings_values, BREAK_ENABLED_KEY, True),
+        "overtime_enabled": _get_bool_setting(settings_values, OVERTIME_ENABLED_KEY, True),
+        "night_enabled": _get_bool_setting(settings_values, NIGHT_ENABLED_KEY, True),
     }
 
 

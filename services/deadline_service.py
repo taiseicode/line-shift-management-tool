@@ -9,7 +9,7 @@ from config import (
     DEADLINE_DAYS_BEFORE_SETTING_KEY,
     DEADLINE_TIME_SETTING_KEY,
 )
-from repositories.settings_repository import get_setting, upsert_setting, delete_setting
+from repositories.settings_repository import get_setting, get_settings, upsert_setting, delete_setting
 from utils import (
     parse_submission_deadline,
     parse_int_or_none,
@@ -26,10 +26,29 @@ MONTHLY_TARGET_KEY = "MONTHLY_TARGET"
 MONTHLY_DEADLINE_TIME_KEY = "MONTHLY_DEADLINE_TIME"
 MONTHLY_TARGET_CURRENT = "current_month"
 MONTHLY_TARGET_NEXT = "next_month"
+DEADLINE_SETTING_KEYS = (
+    SUBMISSION_DEADLINE_SETTING_KEY,
+    DEADLINE_MODE_SETTING_KEY,
+    DEADLINE_DAYS_BEFORE_SETTING_KEY,
+    DEADLINE_TIME_SETTING_KEY,
+    MONTHLY_DEADLINE_DAY_KEY,
+    MONTHLY_TARGET_KEY,
+    MONTHLY_DEADLINE_TIME_KEY,
+)
 
 
-def get_submission_deadline():
-    raw_value = get_setting(SUBMISSION_DEADLINE_SETTING_KEY) or ""
+def get_deadline_settings_values():
+    return get_settings(DEADLINE_SETTING_KEYS)
+
+
+def _read_setting(settings_values, key: str):
+    if settings_values is None:
+        return get_setting(key)
+    return settings_values.get(key)
+
+
+def get_submission_deadline(settings_values=None):
+    raw_value = _read_setting(settings_values, SUBMISSION_DEADLINE_SETTING_KEY) or ""
     return parse_submission_deadline(raw_value)
 
 def set_submission_deadline(deadline):
@@ -41,8 +60,8 @@ def set_submission_deadline(deadline):
         deadline.strftime("%Y-%m-%d %H:%M:%S")
     )
 
-def get_deadline_mode():
-    return (get_setting(DEADLINE_MODE_SETTING_KEY) or "").strip()
+def get_deadline_mode(settings_values=None):
+    return (_read_setting(settings_values, DEADLINE_MODE_SETTING_KEY) or "").strip()
 
 def set_deadline_mode(mode: str):
     normalized = (mode or "").strip()
@@ -51,8 +70,8 @@ def set_deadline_mode(mode: str):
         return
     upsert_setting(DEADLINE_MODE_SETTING_KEY, normalized)
 
-def get_deadline_days_before():
-    return parse_int_or_none(get_setting(DEADLINE_DAYS_BEFORE_SETTING_KEY))
+def get_deadline_days_before(settings_values=None):
+    return parse_int_or_none(_read_setting(settings_values, DEADLINE_DAYS_BEFORE_SETTING_KEY))
 
 def set_deadline_days_before(days_before):
     if days_before is None:
@@ -60,8 +79,8 @@ def set_deadline_days_before(days_before):
         return
     upsert_setting(DEADLINE_DAYS_BEFORE_SETTING_KEY, str(int(days_before)))
 
-def get_deadline_time():
-    value = (get_setting(DEADLINE_TIME_SETTING_KEY) or "").strip()
+def get_deadline_time(settings_values=None):
+    value = (_read_setting(settings_values, DEADLINE_TIME_SETTING_KEY) or "").strip()
     return value if is_valid_time_hhmm(value) else None
 
 def set_deadline_time(hhmm):
@@ -71,14 +90,14 @@ def set_deadline_time(hhmm):
         return
     upsert_setting(DEADLINE_TIME_SETTING_KEY, value)
 
-def get_relative_deadline_settings():
+def get_relative_deadline_settings(settings_values=None):
     return {
-        "days_before": get_deadline_days_before(),
-        "time": get_deadline_time(),
+        "days_before": get_deadline_days_before(settings_values),
+        "time": get_deadline_time(settings_values),
     }
 
-def get_monthly_deadline_day():
-    return parse_int_or_none(get_setting(MONTHLY_DEADLINE_DAY_KEY))
+def get_monthly_deadline_day(settings_values=None):
+    return parse_int_or_none(_read_setting(settings_values, MONTHLY_DEADLINE_DAY_KEY))
 
 def set_monthly_deadline_day(day):
     if day is None:
@@ -86,8 +105,8 @@ def set_monthly_deadline_day(day):
         return
     upsert_setting(MONTHLY_DEADLINE_DAY_KEY, str(int(day)))
 
-def get_monthly_target():
-    value = (get_setting(MONTHLY_TARGET_KEY) or MONTHLY_TARGET_NEXT).strip()
+def get_monthly_target(settings_values=None):
+    value = (_read_setting(settings_values, MONTHLY_TARGET_KEY) or MONTHLY_TARGET_NEXT).strip()
     return value if value in (MONTHLY_TARGET_CURRENT, MONTHLY_TARGET_NEXT) else MONTHLY_TARGET_NEXT
 
 def set_monthly_target(target: str):
@@ -96,8 +115,8 @@ def set_monthly_target(target: str):
         value = MONTHLY_TARGET_NEXT
     upsert_setting(MONTHLY_TARGET_KEY, value)
 
-def get_monthly_deadline_time():
-    value = (get_setting(MONTHLY_DEADLINE_TIME_KEY) or "").strip()
+def get_monthly_deadline_time(settings_values=None):
+    value = (_read_setting(settings_values, MONTHLY_DEADLINE_TIME_KEY) or "").strip()
     return value if is_valid_time_hhmm(value) else None
 
 def set_monthly_deadline_time(hhmm):
@@ -107,11 +126,11 @@ def set_monthly_deadline_time(hhmm):
         return
     upsert_setting(MONTHLY_DEADLINE_TIME_KEY, value)
 
-def get_monthly_deadline_settings():
+def get_monthly_deadline_settings(settings_values=None):
     return {
-        "day": get_monthly_deadline_day(),
-        "target": get_monthly_target(),
-        "time": get_monthly_deadline_time(),
+        "day": get_monthly_deadline_day(settings_values),
+        "target": get_monthly_target(settings_values),
+        "time": get_monthly_deadline_time(settings_values),
     }
 
 def _add_months(year: int, month: int, offset: int):
@@ -169,10 +188,10 @@ def build_relative_deadline(shift_date_obj: date, days_before: int, hhmm: str):
     base_date = shift_date_obj - timedelta(days=days_before)
     return datetime.strptime(f"{to_ymd(base_date)} {hhmm}", "%Y-%m-%d %H:%M")
 
-def get_active_deadline_config():
-    fixed_deadline = get_submission_deadline()
-    relative_settings = get_relative_deadline_settings()
-    monthly_settings = get_monthly_deadline_settings()
+def get_active_deadline_config(settings_values=None):
+    fixed_deadline = get_submission_deadline(settings_values)
+    relative_settings = get_relative_deadline_settings(settings_values)
+    monthly_settings = get_monthly_deadline_settings(settings_values)
     relative_valid = (
         relative_settings["days_before"] is not None and
         relative_settings["days_before"] >= 0 and
@@ -184,7 +203,7 @@ def get_active_deadline_config():
         monthly_settings["target"] in (MONTHLY_TARGET_CURRENT, MONTHLY_TARGET_NEXT) and
         is_valid_time_hhmm(monthly_settings["time"] or "")
     )
-    mode = get_deadline_mode()
+    mode = get_deadline_mode(settings_values)
     base = {
         "monthly_day": monthly_settings["day"],
         "monthly_target": monthly_settings["target"],

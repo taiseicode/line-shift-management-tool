@@ -53,15 +53,27 @@ def _convert_qmark_to_psycopg(sql: str) -> str:
     return "".join(result)
 
 
+def _record_sql_execution():
+    try:
+        from flask import g, has_request_context
+    except Exception:
+        return
+    if not has_request_context():
+        return
+    g.sql_query_count = int(getattr(g, "sql_query_count", 0)) + 1
+
+
 class PostgresCursor:
     def __init__(self, cursor):
         self._cursor = cursor
 
     def execute(self, sql, params=None):
+        _record_sql_execution()
         self._cursor.execute(_convert_qmark_to_psycopg(sql), params)
         return self
 
     def executemany(self, sql, seq_of_params):
+        _record_sql_execution()
         self._cursor.executemany(_convert_qmark_to_psycopg(sql), seq_of_params)
         return self
 

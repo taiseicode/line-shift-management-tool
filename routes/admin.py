@@ -23,7 +23,7 @@ from repositories.confirmed_shift_repository import (
     upsert_confirmed_shift,
 )
 from repositories.required_staff_repository import upsert_required_staff, get_required_staff_range
-from repositories.settings_repository import delete_setting, get_setting, upsert_setting
+from repositories.settings_repository import delete_setting, get_setting, get_settings, upsert_setting
 from repositories.shift_repository import (
     get_entries_range,
     get_shift_entry_by_id,
@@ -51,6 +51,7 @@ from services.confirmed_shift_service import (
 )
 from services.deadline_service import (
     get_active_deadline_config,
+    get_deadline_settings_values,
     get_monthly_deadline_settings,
     get_submission_deadline,
     set_deadline_mode,
@@ -253,9 +254,10 @@ def _build_users_page_context():
 
 def _build_deadline_page_context():
     ctx = _build_admin_shell_context("deadline")
-    active_deadline_config = get_active_deadline_config()
-    submission_deadline = get_submission_deadline()
-    monthly_settings = get_monthly_deadline_settings()
+    deadline_settings = get_deadline_settings_values()
+    active_deadline_config = get_active_deadline_config(deadline_settings)
+    submission_deadline = get_submission_deadline(deadline_settings)
+    monthly_settings = get_monthly_deadline_settings(deadline_settings)
     mode_labels = {
         "fixed": "固定日時方式",
         "relative": "相対期限方式",
@@ -461,13 +463,15 @@ def _build_period_status_counts(entries):
 
     return submission_counts, confirmation_counts
 
-def get_daily_shift_graph_start_time():
-    value = (get_setting(DAILY_SHIFT_GRAPH_START_TIME_KEY) or "").strip()
+def get_daily_shift_graph_start_time(settings_values=None):
+    raw_value = settings_values.get(DAILY_SHIFT_GRAPH_START_TIME_KEY) if settings_values is not None else get_setting(DAILY_SHIFT_GRAPH_START_TIME_KEY)
+    value = (raw_value or "").strip()
     return value if is_valid_time_hhmm(value) else DEFAULT_DAILY_SHIFT_GRAPH_START_TIME
 
 
-def get_daily_shift_graph_end_time():
-    value = (get_setting(DAILY_SHIFT_GRAPH_END_TIME_KEY) or "").strip()
+def get_daily_shift_graph_end_time(settings_values=None):
+    raw_value = settings_values.get(DAILY_SHIFT_GRAPH_END_TIME_KEY) if settings_values is not None else get_setting(DAILY_SHIFT_GRAPH_END_TIME_KEY)
+    value = (raw_value or "").strip()
     return value if is_valid_time_hhmm(value) else DEFAULT_DAILY_SHIFT_GRAPH_END_TIME
 
 
@@ -624,15 +628,19 @@ def _build_confirm_page_context():
         for hour in range(24)
         for minute in (0, 15, 30, 45)
     ]
-    ctx["daily_shift_graph_start_time"] = get_daily_shift_graph_start_time()
-    ctx["daily_shift_graph_end_time"] = get_daily_shift_graph_end_time()
+    timeline_settings = get_settings([DAILY_SHIFT_GRAPH_START_TIME_KEY, DAILY_SHIFT_GRAPH_END_TIME_KEY])
+    ctx["daily_shift_graph_start_time"] = get_daily_shift_graph_start_time(timeline_settings)
+    ctx["daily_shift_graph_end_time"] = get_daily_shift_graph_end_time(timeline_settings)
     ctx["timeline_slots"] = _build_timeline_slots(ctx["daily_shift_graph_start_time"], ctx["daily_shift_graph_end_time"])
     daily_shift_date = parse_ymd(request.args.get("daily_shift_date") or session.get("daily_shift_date") or "")
     ctx["daily_shift_date_value"] = to_ymd(daily_shift_date) if daily_shift_date else ctx["confirm_date_value"]
     rows = get_entries_range(ctx["start_value"], ctx["end_value"])
-    summary_by_date = calculate_staff_summary_from_rows(ctx["start_d"], ctx["end_d"], rows)
-    submission_entries = get_submission_entries_by_date(ctx["confirm_date_value"])
     active_users = [user for user in get_all_users(include_inactive=False) if int(user["active"]) == 1]
+    summary_by_date = calculate_staff_summary_from_rows(ctx["start_d"], ctx["end_d"], rows, len(active_users))
+    submission_entries = [
+        row for row in rows
+        if row["date"] == ctx["confirm_date_value"] and int(row["active"]) == 1
+    ]
     decision_rows = get_confirmed_shift_decisions_range(ctx["start_value"], ctx["end_value"])
     if not (ctx["start_value"] <= ctx["confirm_date_value"] <= ctx["end_value"]):
         decision_rows = list(decision_rows) + list(get_confirmed_shift_decisions_by_date(ctx["confirm_date_value"]))

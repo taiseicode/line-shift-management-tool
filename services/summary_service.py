@@ -14,7 +14,7 @@ def calculate_staff_summary(start_d: date, end_d: date):
     return calculate_staff_summary_from_rows(start_d, end_d, rows)
 
 
-def calculate_staff_summary_from_rows(start_d: date, end_d: date, rows):
+def calculate_staff_summary_from_rows(start_d: date, end_d: date, rows, active_user_count=None):
     start_ymd = to_ymd(start_d)
     end_ymd = to_ymd(end_d)
     required_map = get_required_staff_range(start_ymd, end_ymd)
@@ -32,13 +32,16 @@ def calculate_staff_summary_from_rows(start_d: date, end_d: date, rows):
             "entries": []
         }
 
-    conn = get_conn()
-    try:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) AS cnt FROM users WHERE active=1")
-        total_users = int(c.fetchone()["cnt"])
-    finally:
-        conn.close()
+    if active_user_count is None:
+        conn = get_conn()
+        try:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) AS cnt FROM users WHERE active=1")
+            total_users = int(c.fetchone()["cnt"])
+        finally:
+            conn.close()
+    else:
+        total_users = int(active_user_count)
 
     for r in rows:
         if int(r["active"]) != 1:

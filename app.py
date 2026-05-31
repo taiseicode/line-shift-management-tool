@@ -13,6 +13,16 @@ from routes.webhook import webhook_bp
 from services.auth_service import validate_runtime_security
 
 
+ADMIN_TIMING_PATHS = {
+    "/admin",
+    "/admin/confirm",
+    "/admin/cost",
+    "/admin/deadline",
+    "/admin/users",
+    "/admin/manual",
+}
+
+
 def create_app():
     app = Flask(__name__)
     app.secret_key = FLASK_SECRET_KEY
@@ -25,7 +35,7 @@ def create_app():
 
     @app.before_request
     def _start_request_timer():
-        if request.path.startswith("/admin") or request.path.startswith("/api"):
+        if request.path in ADMIN_TIMING_PATHS:
             g.request_started_at = perf_counter()
 
     @app.after_request
@@ -38,8 +48,12 @@ def create_app():
 
         started_at = getattr(g, "request_started_at", None)
         if started_at is not None and os.getenv("ADMIN_TIMING_LOG", "1").strip().lower() in ("1", "true", "yes", "on"):
-            elapsed_ms = (perf_counter() - started_at) * 1000
-            print(f"[timing] {request.method} {request.path} {response.status_code} {elapsed_ms:.1f}ms", flush=True)
+            elapsed_seconds = perf_counter() - started_at
+            sql_count = int(getattr(g, "sql_query_count", 0))
+            print(
+                f"[admin timing] {request.method} {request.path} {response.status_code} {elapsed_seconds:.3f}s sql={sql_count}",
+                flush=True,
+            )
         return response
 
     validate_runtime_security()

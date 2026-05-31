@@ -49,6 +49,44 @@ def get_setting(key: str):
     finally:
         conn.close()
 
+
+def get_settings(keys):
+    unique_keys = []
+    for key in keys:
+        normalized = str(key)
+        if normalized not in unique_keys:
+            unique_keys.append(normalized)
+
+    result = {}
+    missing_keys = []
+    for key in unique_keys:
+        found, value = _get_cached_setting(key)
+        if found:
+            result[key] = value
+        else:
+            missing_keys.append(key)
+
+    if not missing_keys:
+        return result
+
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        placeholders = ", ".join(["?"] * len(missing_keys))
+        rows = c.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+            missing_keys,
+        ).fetchall()
+        fetched = {row["key"]: row["value"] for row in rows}
+        for key in missing_keys:
+            value = fetched.get(key)
+            result[key] = value
+            _set_cached_setting(key, value)
+        return result
+    finally:
+        conn.close()
+
+
 def upsert_setting(key: str, value: str):
     conn = get_conn()
     try:
