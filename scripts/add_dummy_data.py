@@ -1,9 +1,20 @@
+"""Add local demo users and shift submissions to the SQLite database.
+
+This helper is intended for local UI/operation checks only.
+
+- It writes to the SQLite database selected by DB_PATH.
+- On Render/Supabase, the app normally uses DATABASE_URL instead of DB_PATH.
+- Running this locally does not update the Render database.
+- Do not run this against production data unless you have a backup.
+"""
+
+from __future__ import annotations
+
+import os
 import random
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
-import os
-
 
 try:
     from dotenv import load_dotenv
@@ -31,14 +42,14 @@ NAMES = [
     "加藤里奈",
     "吉田悠人",
     "山田千尋",
-    "佐々木亮",
-    "松本奈々",
     "井上和也",
+    "松本奈々",
+    "清水愛",
     "木村遥",
     "林誠",
-    "清水愛",
-    "山口航",
     "森田杏",
+    "山口航",
+    "井上倫",
 ]
 
 SHIFT_PATTERNS = [
@@ -53,28 +64,40 @@ SHIFT_PATTERNS = [
 def load_db_path() -> Path:
     if load_dotenv:
         load_dotenv(ROOT / ".env")
-    db_path = os.getenv("DB_PATH", "shift.db")
-    path = Path(db_path)
-    if not path.is_absolute():
-        path = ROOT / path
-    return path
+    raw_path = os.getenv("DB_PATH", "shift.db").strip()
+    db_path = Path(raw_path)
+    if not db_path.is_absolute():
+        db_path = ROOT / db_path
+    return db_path
 
 
-def table_columns(cursor, table_name: str):
-    return {row["name"] for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()}
-
-
-def ensure_database_exists(db_path: Path):
+def ensure_database_exists(db_path: Path) -> None:
     if not db_path.exists():
         raise SystemExit(f"DB not found: {db_path}")
 
 
-def next_display_order(cursor):
+def confirm_target_database(db_path: Path) -> None:
+    print("This script adds local demo users and shift submissions.")
+    print(f"Target SQLite DB: {db_path}")
+    if os.getenv("DATABASE_URL"):
+        print("Note: DATABASE_URL is set. The running app may use PostgreSQL, but this helper writes only to DB_PATH SQLite.")
+    print("Local changes are not reflected in Render unless this script is run on Render Shell.")
+    print("Do not run this against production data without a backup.")
+    answer = input("Add dummy data to this DB? Type y to continue [y/N]: ").strip().lower()
+    if answer != "y":
+        raise SystemExit("Cancelled.")
+
+
+def table_columns(cursor: sqlite3.Cursor, table_name: str) -> set[str]:
+    return {row["name"] for row in cursor.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+
+def next_display_order(cursor: sqlite3.Cursor) -> int:
     row = cursor.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
     return int(row["next_order"] or 1)
 
 
-def upsert_dummy_users(cursor):
+def upsert_dummy_users(cursor: sqlite3.Cursor) -> None:
     user_columns = table_columns(cursor, "users")
     has_active = "active" in user_columns
     has_display_order = "display_order" in user_columns
@@ -90,7 +113,7 @@ def upsert_dummy_users(cursor):
 
         if existing:
             assignments = ["name = ?"]
-            params = [name]
+            params: list[object] = [name]
             if has_active:
                 assignments.append("active = 1")
             if has_display_order and existing["display_order"] is None:
@@ -105,7 +128,7 @@ def upsert_dummy_users(cursor):
             continue
 
         columns = ["line_user_id", "name"]
-        values = [line_user_id, name]
+        values: list[object] = [line_user_id, name]
         if has_active:
             columns.append("active")
             values.append(1)
@@ -121,7 +144,7 @@ def upsert_dummy_users(cursor):
         )
 
 
-def dummy_user_rows(cursor):
+def dummy_user_rows(cursor: sqlite3.Cursor) -> list[sqlite3.Row]:
     return cursor.execute(
         """
         SELECT id, line_user_id, name
@@ -133,7 +156,7 @@ def dummy_user_rows(cursor):
     ).fetchall()
 
 
-def reset_dummy_entries_for_dates(cursor, user_ids, dates):
+def reset_dummy_entries_for_dates(cursor: sqlite3.Cursor, user_ids: list[int], dates: list[str]) -> None:
     if not user_ids:
         return
     placeholders = ", ".join(["?"] * len(user_ids))
@@ -144,14 +167,14 @@ def reset_dummy_entries_for_dates(cursor, user_ids, dates):
         )
 
 
-def insert_dummy_shift_entries(cursor, users, dates):
+def insert_dummy_shift_entries(cursor: sqlite3.Cursor, users: list[sqlite3.Row], dates: list[str]) -> None:
     rng = random.Random(RANDOM_SEED)
     overnight_inserted = 0
 
     for day_index, target_date in enumerate(dates):
         submitted_users = rng.sample(users, SUBMITTED_PER_DAY)
         for user_index, user in enumerate(submitted_users):
-            # Roughly mix work and days off. Users not selected for this date are left unsubmitted.
+            # Mix work, days off, and unsubmitted users for UI checks.
             is_off = rng.random() < 0.25
             if is_off:
                 cursor.execute(
@@ -188,9 +211,10 @@ def insert_dummy_shift_entries(cursor, users, dates):
             )
 
 
-def main():
+def main() -> None:
     db_path = load_db_path()
     ensure_database_exists(db_path)
+    confirm_target_database(db_path)
     start_date = date.today()
     dates = [(start_date + timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(DAYS)]
 

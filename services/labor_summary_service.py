@@ -181,8 +181,13 @@ def _summary_base(label_key: str, label_value: str, settings, users):
 
 def build_daily_summary(target_date: date):
     target_ymd = target_date.strftime("%Y-%m-%d")
-    settings = get_labor_settings()
     rows = get_confirmed_shifts_range(target_ymd, target_ymd)
+    return build_daily_summary_from_rows(target_date, rows)
+
+
+def build_daily_summary_from_rows(target_date: date, rows):
+    target_ymd = target_date.strftime("%Y-%m-%d")
+    settings = get_labor_settings()
     users = []
 
     for row in rows:

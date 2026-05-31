@@ -11,6 +11,12 @@ def calculate_staff_summary(start_d: date, end_d: date):
     end_ymd = to_ymd(end_d)
 
     rows = get_entries_range(start_ymd, end_ymd)
+    return calculate_staff_summary_from_rows(start_d, end_d, rows)
+
+
+def calculate_staff_summary_from_rows(start_d: date, end_d: date, rows):
+    start_ymd = to_ymd(start_d)
+    end_ymd = to_ymd(end_d)
     required_map = get_required_staff_range(start_ymd, end_ymd)
 
     by_date = {}

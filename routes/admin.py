@@ -64,13 +64,14 @@ from services.deadline_service import (
 from services.labor_summary_service import (
     DEFAULT_HOURLY_WAGE,
     build_daily_summary,
+    build_daily_summary_from_rows,
     build_monthly_summary,
     get_labor_settings,
     get_hourly_wage,
     save_labor_settings,
     set_hourly_wage,
 )
-from services.summary_service import calculate_staff_summary
+from services.summary_service import calculate_staff_summary, calculate_staff_summary_from_rows
 from utils import (
     parse_ymd,
     to_ymd,
@@ -296,7 +297,7 @@ def _build_home_page_context():
         row for row in get_confirmed_shifts_by_date(today_value)
         if int(row["is_assigned"] or 0) == 1 and row["start_time"] and row["end_time"]
     ]
-    daily_labor = build_daily_summary(today)
+    daily_labor = build_daily_summary_from_rows(today, confirmed_today)
     gross_minutes = sum(int(user["gross_minutes"] or 0) for user in daily_labor["users"])
 
     (
@@ -629,7 +630,7 @@ def _build_confirm_page_context():
     daily_shift_date = parse_ymd(request.args.get("daily_shift_date") or session.get("daily_shift_date") or "")
     ctx["daily_shift_date_value"] = to_ymd(daily_shift_date) if daily_shift_date else ctx["confirm_date_value"]
     rows = get_entries_range(ctx["start_value"], ctx["end_value"])
-    summary_by_date = calculate_staff_summary(ctx["start_d"], ctx["end_d"])
+    summary_by_date = calculate_staff_summary_from_rows(ctx["start_d"], ctx["end_d"], rows)
     submission_entries = get_submission_entries_by_date(ctx["confirm_date_value"])
     active_users = [user for user in get_all_users(include_inactive=False) if int(user["active"]) == 1]
     decision_rows = get_confirmed_shift_decisions_range(ctx["start_value"], ctx["end_value"])
