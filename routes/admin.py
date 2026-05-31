@@ -1271,8 +1271,12 @@ def admin_update_submission_deadline():
         return "何日前は0以上で入力してください", 400
     if deadline_time and not is_valid_time_hhmm(deadline_time):
         return "締切時刻の形式が不正です（HH:MM）", 400
+    if deadline_mode == "monthly_fixed" and monthly_day_raw == "":
+        return "締切日を入力してください", 400
     if monthly_day_raw != "" and monthly_day is None:
-        return "月固定締切日の形式が不正です", 400
+        return "締切日は1〜31の範囲で入力してください", 400
+    if deadline_mode == "monthly_fixed" and monthly_day is not None and not (1 <= monthly_day <= 31):
+        return "締切日は1～31の範囲で入力してください", 400
     if monthly_day is not None and not (1 <= monthly_day <= 31):
         return "月固定締切日は1〜31で入力してください", 400
     if monthly_target not in ("current_month", "next_month"):
