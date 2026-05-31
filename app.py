@@ -23,6 +23,12 @@ ADMIN_TIMING_PATHS = {
 }
 
 
+def _admin_timing_log_enabled():
+    # ADMIN_TIMING_LOG=1 enables temporary admin page timing logs.
+    # Leave unset or set ADMIN_TIMING_LOG=0 in production to keep logs quiet.
+    return os.getenv("ADMIN_TIMING_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 def create_app():
     app = Flask(__name__)
     app.secret_key = FLASK_SECRET_KEY
@@ -47,7 +53,7 @@ def create_app():
                 response.headers.setdefault("Cache-Control", "public, max-age=43200")
 
         started_at = getattr(g, "request_started_at", None)
-        if started_at is not None and os.getenv("ADMIN_TIMING_LOG", "1").strip().lower() in ("1", "true", "yes", "on"):
+        if started_at is not None and _admin_timing_log_enabled():
             elapsed_seconds = perf_counter() - started_at
             sql_count = int(getattr(g, "sql_query_count", 0))
             print(
