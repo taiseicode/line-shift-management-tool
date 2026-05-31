@@ -222,7 +222,8 @@ def build_monthly_summary(start_date: date, end_exclusive_date: date, month_text
         item = calculate_shift_cost(row, settings)
         if not item:
             continue
-        user_total = totals_by_user.setdefault(row["name"] or "", {
+        user_key = row["user_id"] if "user_id" in row.keys() else (row["name"] or "")
+        user_total = totals_by_user.setdefault(user_key, {
             "name": row["name"] or "",
             "shift_time": "月合計",
             "gross_minutes": 0,
@@ -251,8 +252,8 @@ def build_monthly_summary(start_date: date, end_exclusive_date: date, month_text
             user_total[key] += item[key]
 
     users = []
-    for name in sorted(totals_by_user.keys()):
-        item = totals_by_user[name]
+    for user_key in sorted(totals_by_user.keys(), key=lambda key: totals_by_user[key]["name"] or ""):
+        item = totals_by_user[user_key]
         item.update({
             "gross_hours": minutes_to_hours(item["gross_minutes"]),
             "break_label": f"{item['break_minutes']}分" if settings["break_enabled"] else "無効",

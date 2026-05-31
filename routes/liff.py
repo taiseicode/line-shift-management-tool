@@ -1,10 +1,8 @@
-from datetime import datetime
-
 from flask import Blueprint, request, make_response
 
 from config import LIFF_ID
 from services.deadline_service import get_active_deadline_config
-from utils import parse_ymd, to_ymd, html_escape
+from utils import parse_ymd, to_ymd, html_escape, today_jst
 
 
 liff_bp = Blueprint("liff", __name__)
@@ -15,7 +13,7 @@ def liff_submit():
     if not LIFF_ID:
         return "LIFF_ID が .env に設定されていません", 500
 
-    today = datetime.now().date()
+    today = today_jst()
     start_value = request.args.get("start", "").strip()
     start_d = parse_ymd(start_value) or today
     start_value = to_ymd(start_d)
@@ -553,7 +551,7 @@ def liff_submit():
             </div>
           </div>
           <div class="form-text mt-2">
-            ※15分刻み。終了は開始より後にしてください。
+            ※15分刻み。日をまたぐ勤務も入力できます。
           </div>
         </div>
 
@@ -1702,8 +1700,8 @@ async function main() {{
     const start = document.getElementById("startTime").value;
     const end = document.getElementById("endTime").value;
 
-    if (!off && minutes(end) <= minutes(start)) {{
-      setError("終了は開始より後にしてください。");
+    if (!off && minutes(end) === minutes(start)) {{
+      setError("開始時間と終了時間が同じです。");
       return;
     }}
 

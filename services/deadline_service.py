@@ -18,6 +18,7 @@ from utils import (
     format_submission_deadline,
     format_relative_deadline,
     parse_ymd,
+    now_jst,
 )
 
 
@@ -286,7 +287,7 @@ def get_active_deadline_config(settings_values=None):
 
 def get_submission_deadline_status(shift_date_obj=None, now=None, active_config=None):
     active_config = active_config or get_active_deadline_config()
-    current = now or datetime.now()
+    current = now or now_jst()
     mode = active_config["mode"]
     deadline = None
     label = ""

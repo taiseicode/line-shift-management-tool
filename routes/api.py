@@ -8,12 +8,13 @@ from repositories.shift_repository import get_my_entries_range, upsert_shift_ent
 from repositories.user_repository import get_user_by_line_id, upsert_user
 from services.auth_service import require_verified_line_claims, reject_if_user_inactive, verify_line_id_token
 from services.deadline_service import build_deadline_status_payload, get_active_deadline_config, reject_if_submission_closed_for_date
-from utils import parse_ymd, to_ymd, is_valid_time_hhmm, hhmm_to_minutes
+from utils import parse_ymd, to_ymd, is_valid_time_hhmm, hhmm_to_minutes, now_jst, today_jst
 
 
 api_bp = Blueprint("api", __name__)
 CONFIRMED_SHIFT_LOCK_MESSAGE = "この日はすでにシフトが確定しているため、変更できません。"
 API_DEBUG_MODE = os.getenv("DEBUG_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+QUARTER_HOUR_MINUTES = {0, 15, 30, 45}
 
 
 def get_verified_line_user_for_api():
@@ -351,6 +352,10 @@ def _time_to_minutes(value: str):
     return hhmm_to_minutes(value)
 
 
+def _is_quarter_hour_time(value: str) -> bool:
+    return is_valid_time_hhmm(value or "") and int(value[3:]) in QUARTER_HOUR_MINUTES
+
+
 def _overlap_minutes(start_a, end_a, start_b, end_b):
     start = max(start_a, start_b)
     end = min(end_a, end_b)
@@ -477,7 +482,7 @@ def _build_confirmed_debug_details(line_user_id: str, user, confirmed_columns):
 def _build_my_confirmed_shift_payload(line_user_id: str, user, start_d, end_d, entries=None):
     start_ymd = to_ymd(start_d)
     end_ymd = to_ymd(end_d)
-    today_ymd = to_ymd(datetime.now().date())
+    today_ymd = to_ymd(today_jst())
     entries = entries or {}
 
     confirmed_columns = _get_table_columns("confirmed_shifts")
@@ -600,9 +605,6 @@ def _is_user_shift_confirmed(user_id: int, date_str: str) -> bool:
             FROM confirmed_shifts
             WHERE user_id = ?
               AND date = ?
-              AND is_assigned = 1
-              AND COALESCE(NULLIF(start_time, ''), '') <> ''
-              AND COALESCE(NULLIF(end_time, ''), '') <> ''
             LIMIT 1
         """, (user_id, date_str))
         return c.fetchone() is not None
@@ -799,7 +801,7 @@ def api_my_pay_summary():
     if error_response:
         return error_response
     received_line_user_id = (request.headers.get("X-Line-User-Id") or "").strip()
-    month = (request.args.get("month") or datetime.now().strftime("%Y-%m")).strip()
+    month = (request.args.get("month") or now_jst().strftime("%Y-%m")).strip()
     month_start, month_end = _month_bounds(month)
     if not month_start or not month_end:
         return jsonify({"error": "month は YYYY-MM 形式で指定してください"}), 400
@@ -898,7 +900,7 @@ def api_save_day():
     shift_date_obj = parse_ymd(date_str)
     if not shift_date_obj:
         return jsonify({"error": "date が不正です"}), 400
-    if shift_date_obj < datetime.now().date():
+    if shift_date_obj < today_jst():
         return jsonify({
             "ok": False,
             "error": "過去日は変更できません"
@@ -929,8 +931,10 @@ def api_save_day():
     else:
         if not (is_valid_time_hhmm(start_time or "") and is_valid_time_hhmm(end_time or "")):
             return jsonify({"error": "時間形式が不正です（HH:MM）"}), 400
-        if hhmm_to_minutes(end_time) <= hhmm_to_minutes(start_time):
-            return jsonify({"error": "終了は開始より後にしてください"}), 400
+        if not (_is_quarter_hour_time(start_time) and _is_quarter_hour_time(end_time)):
+            return jsonify({"error": "時間は15分単位で入力してください"}), 400
+        if hhmm_to_minutes(end_time) == hhmm_to_minutes(start_time):
+            return jsonify({"error": "開始時間と終了時間が同じです"}), 400
         upsert_shift_entry(user["id"], date_str, 0, start_time, end_time)
 
     rows = get_my_entries_range(user["id"], date_str, date_str)
@@ -960,7 +964,7 @@ def api_delete_day():
     shift_date_obj = parse_ymd(date_str)
     if not shift_date_obj:
         return jsonify({"error": "date が不正です"}), 400
-    if shift_date_obj < datetime.now().date():
+    if shift_date_obj < today_jst():
         return jsonify({
             "ok": False,
             "error": "過去日は変更できません"

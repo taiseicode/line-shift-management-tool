@@ -85,6 +85,7 @@ from utils import (
     html_escape,
     get_weekday_jp,
     is_valid_time_hhmm,
+    today_jst,
 )
 
 
@@ -172,7 +173,7 @@ def parse_month_start(month_text: str):
 
 
 def _get_admin_date_state():
-    today = datetime.now().date()
+    today = today_jst()
     start = (request.args.get("start") or "").strip()
     end = (request.args.get("end") or "").strip()
     confirm_date = (request.args.get("confirm_date") or request.args.get("date") or "").strip()
@@ -758,7 +759,7 @@ def _build_confirm_page_context():
 
 
 def _get_daily_shift_target_date():
-    today = datetime.now().date()
+    today = today_jst()
     raw_value = (request.args.get("target_date") or request.args.get("confirm_date") or session.get("daily_shift_date") or "").strip()
     target_date = parse_ymd(raw_value) or today
     session["daily_shift_date"] = to_ymd(target_date)
@@ -1395,7 +1396,7 @@ def admin_home_content():
         return redirect("/login")
     csrf_token_value = get_or_create_csrf_token()
 
-    today = datetime.now().date()
+    today = today_jst()
     start = request.args.get("start", "").strip()
     end = request.args.get("end", "").strip()
 

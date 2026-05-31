@@ -1,5 +1,20 @@
 import re
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+try:
+    APP_TIMEZONE = ZoneInfo("Asia/Tokyo")
+except ZoneInfoNotFoundError:
+    APP_TIMEZONE = timezone(timedelta(hours=9), "JST")
+
+
+def now_jst() -> datetime:
+    return datetime.now(APP_TIMEZONE).replace(tzinfo=None)
+
+
+def today_jst() -> date:
+    return now_jst().date()
 
 
 def to_ymd(d: date) -> str:
