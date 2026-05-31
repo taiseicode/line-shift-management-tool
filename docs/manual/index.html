@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LINEシフト管理ツール 利用説明書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="manual">
+    <section class="page cover" id="cover">
+      <div>
+        <div class="cover-kicker">管理者・従業員向け</div>
+        <h1>LINEシフト管理ツール<br>利用説明書</h1>
+        <p class="cover-lead">従業員のシフト提出から、管理者の確定シフト作成、Excel出力、概算人件費の確認までをまとめた操作マニュアルです。</p>
+        <div class="badge-row">
+          <span class="badge">LINE提出</span>
+          <span class="badge">確定シフト管理</span>
+          <span class="badge">提出期限</span>
+          <span class="badge">1日シフト表</span>
+          <span class="badge">Excel出力</span>
+          <span class="badge">概算人件費</span>
+        </div>
+        <div class="flow" aria-label="基本の操作フロー">
+          <div class="flow-step"><strong>1. 提出</strong><span>従業員がLINEで出勤希望・休み希望を提出します。</span></div>
+          <div class="flow-step"><strong>2. 確認</strong><span>管理者が提出状況と必要人数を確認します。</span></div>
+          <div class="flow-step"><strong>3. 確定</strong><span>管理者が出勤・休み・未処理を決めて保存します。</span></div>
+          <div class="flow-step"><strong>4. 活用</strong><span>1日表、Excel、人件費で確定シフトを確認します。</span></div>
+        </div>
+      </div>
+      <div class="cover-footer">
+        <span>店舗運用向け 操作マニュアル</span>
+        <span>A4印刷・PDF保存対応</span>
+      </div>
+    </section>
+
+    <section class="page" id="toc">
+      <p class="section-label">Contents</p>
+      <h2>この説明書の使い方</h2>
+      <p class="lead">各画面は「この画面でできること」「画面例」「操作手順」「注意点」の順番で説明します。画面例を見ながら、下の手順に沿って操作してください。</p>
+      <div class="toc">
+        <a href="#overview"><strong>1. 全体概要</strong><span>提出シフトと確定シフトの考え方</span></a>
+        <a href="#staff"><strong>2. 従業員側の使い方</strong><span>LINEで提出・確認する流れ</span></a>
+        <a href="#admin-basic"><strong>3. 管理者画面の基本</strong><span>ホームとサイドバー</span></a>
+        <a href="#users"><strong>4. 登録ユーザー一覧</strong><span>スタッフ確認・表示順・無効化</span></a>
+        <a href="#deadline"><strong>5. シフト提出期限</strong><span>提出できる締切ルール</span></a>
+        <a href="#confirm"><strong>6. 確定シフト管理</strong><span>出勤・休み・未処理の決定</span></a>
+        <a href="#summary"><strong>7. 期間サマリ</strong><span>提出状況と確定状況</span></a>
+        <a href="#daily"><strong>8. 1日シフト表</strong><span>タイムライン確認</span></a>
+        <a href="#excel"><strong>9. Excel出力</strong><span>共有・確認用ファイル</span></a>
+        <a href="#cost"><strong>10. 人件費集計</strong><span>日別・月別の概算人件費</span></a>
+        <a href="#examples"><strong>11. よくある操作</strong><span>現場で使う定番操作</span></a>
+        <a href="#trouble"><strong>12. 注意点・困ったとき</strong><span>運用時の確認ポイント</span></a>
+      </div>
+    </section>
+
+    <section class="page" id="overview">
+      <p class="section-label">Overview</p>
+      <h2>システム全体の概要</h2>
+      <p class="lead">このツールでは、従業員が出す「希望」と、管理者が決める「実際の勤務予定」を分けて管理します。</p>
+
+      <div class="feature-box">
+        <h3>このページで分かること</h3>
+        <ul>
+          <li>提出シフトと確定シフトの違い</li>
+          <li>管理者が保存した内容が、勤務表や集計に使われること</li>
+          <li>Excel出力や人件費集計が、確定シフトをもとに作られること</li>
+        </ul>
+      </div>
+
+      <div class="concept-map">
+        <div class="concept">
+          <small>従業員が入力</small>
+          <strong>提出シフト</strong>
+          <p>従業員の希望です。出勤希望、休み希望、未提出を確認できます。</p>
+        </div>
+        <div class="concept primary">
+          <small>管理者が保存</small>
+          <strong>確定シフト</strong>
+          <p>実際に勤務する予定です。人件費、Excel、1日シフト表に使われます。</p>
+        </div>
+      </div>
+
+      <div class="data-flow">
+        <div class="data-node"><strong>提出シフト</strong><span>従業員の希望</span></div>
+        <div class="data-arrow">→</div>
+        <div class="data-node"><strong>確定シフト</strong><span>管理者が決定</span></div>
+        <div class="data-arrow">→</div>
+        <div class="data-node"><strong>Excel・人件費</strong><span>確定内容から作成</span></div>
+      </div>
+
+      <div class="callout info">
+        <strong>重要</strong>
+        LINEで提出しただけでは確定ではありません。管理者が保存すると、確定シフトとして反映されます。
+      </div>
+    </section>
+
+    <section class="page" id="staff">
+      <p class="section-label">Staff</p>
+      <h2>従業員側の使い方</h2>
+      <p class="lead">従業員はLINEからシフトを提出します。提出後は、確定シフトや自分の概算給与も確認できます。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>出勤できる日を提出できます</li>
+          <li>休み希望を提出できます</li>
+          <li>週を切り替えて入力できます</li>
+          <li>確定シフトを確認できます</li>
+          <li>自分の概算給与と勤務時間を確認できます</li>
+        </ul>
+      </div>
+
+      <div class="grid-2">
+        <figure class="screen">
+          <div class="screen-frame"><img class="manual-shot" src="images/manual_staff_submit.jpg" alt="従業員のシフト提出画面と入力画面"></div>
+          <figcaption>シフト提出画面です。出勤できる日を選び、開始時間と終了時間を入力して保存します。</figcaption>
+        </figure>
+        <figure class="screen">
+          <div class="screen-frame"><img class="manual-shot" src="images/manual_staff_confirmed_pay.jpg" alt="従業員の確定シフトと見込み給与の確認画面"></div>
+          <figcaption>確定シフト・見込み給与の確認画面です。勤務履歴、確定済みの勤務、概算給与を確認できます。</figcaption>
+        </figure>
+      </div>
+
+      <div class="steps">
+        <div class="step"><strong>LINEから画面を開きます</strong><span>案内されたリンクからシフト提出画面を開きます。</span></div>
+        <div class="step"><strong>出勤または休みを選びます</strong><span>出勤の場合は開始時間と終了時間を入力します。休みの場合は休みを選びます。</span></div>
+        <div class="step"><strong>保存します</strong><span>入力した内容が提出シフトとして管理者画面に表示されます。</span></div>
+        <div class="step"><strong>確定シフトを確認します</strong><span>管理者が保存した勤務予定を、確定シフト画面で確認します。</span></div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        提出期限を過ぎた日や過去日は変更できない場合があります。変更が必要な場合は管理者へ連絡してください。
+      </div>
+    </section>
+
+    <section class="page" id="admin-basic">
+      <p class="section-label">Admin Basic</p>
+      <h2>管理者画面の基本</h2>
+      <p class="lead">管理者画面では、今日の状況を確認しながら、左側のメニューから各機能へ移動します。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>今日の出勤人数を確認できます</li>
+          <li>今日の概算人件費を確認できます</li>
+          <li>今日の総労働時間を確認できます</li>
+          <li>今日のタイムラインを閲覧できます</li>
+          <li>各管理画面へ移動できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_home.png" alt="管理者ホーム 今日の運営状況"></div>
+        <figcaption>ホーム画面。今日の出勤人数、人件費、総労働時間、タイムラインを確認します。</figcaption>
+      </figure>
+
+      <div class="grid-2">
+        <figure class="screen narrow">
+          <div class="screen-frame"><img src="images/admin_sidebar.png" alt="管理画面のサイドバー"></div>
+          <figcaption>左側メニュー。現在開いている画面が強調表示されます。</figcaption>
+        </figure>
+        <div class="operation-list single">
+          <div class="operation"><strong>ホーム</strong>今日の運営状況を確認します。</div>
+          <div class="operation"><strong>確定シフト管理</strong>提出内容を確認し、出勤・休みを確定します。</div>
+          <div class="operation"><strong>1日シフト表</strong>1日の勤務予定をタイムラインで確認します。</div>
+          <div class="operation"><strong>シフト提出期限</strong>従業員が提出できる締切ルールを設定します。</div>
+          <div class="operation"><strong>人件費集計</strong>日別・月別の概算人件費を確認します。</div>
+          <div class="operation"><strong>登録ユーザー一覧</strong>スタッフの名前、表示順、有効状態を管理します。</div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <strong>表示状態をリセット</strong>
+        日付や並び順の表示を初期状態に戻したいときに使います。
+      </div>
+    </section>
+
+    <section class="page" id="users">
+      <p class="section-label">Users</p>
+      <h2>登録ユーザー一覧</h2>
+      <p class="lead">登録済みスタッフを確認し、勤務表に表示する順番や名前を管理します。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>登録済みスタッフを確認できます</li>
+          <li>勤務表に表示する順番を変更できます</li>
+          <li>スタッフ名を変更できます</li>
+          <li>勤務表に表示しないスタッフを無効化できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_users.png" alt="登録ユーザー一覧画面"></div>
+        <figcaption>登録ユーザー一覧。スタッフ名、状態、表示順、操作欄を確認します。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>スタッフを確認します</strong><span>登録済みスタッフが一覧に表示されます。</span></div>
+        <div class="step"><strong>表示順を変更します</strong><span>↑↓を押すと、勤務表やExcelでの並び順が変わります。</span></div>
+        <div class="step"><strong>名前を変更します</strong><span>表示名を入力し、「名前を更新」を押します。</span></div>
+        <div class="step"><strong>不要なスタッフを無効化します</strong><span>勤務表に出さないスタッフは無効化します。</span></div>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_disabled_users.png" alt="無効スタッフ一覧"></div>
+        <figcaption>無効スタッフ欄。無効化したスタッフを確認できます。</figcaption>
+      </figure>
+
+      <div class="callout danger">
+        <strong>注意点</strong>
+        スタッフの無効化や削除は、勤務表や集計に影響します。対象のスタッフを確認してから操作してください。
+      </div>
+    </section>
+
+    <section class="page" id="deadline">
+      <p class="section-label">Deadline</p>
+      <h2>シフト提出期限</h2>
+      <p class="lead">従業員がシフトを提出できる期限を設定します。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>提出期限の方式を選べます</li>
+          <li>固定日時の締切を設定できます</li>
+          <li>シフト日の何日前まで提出できるかを設定できます</li>
+          <li>毎月の締切日を設定できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_deadline.png" alt="シフト提出期限設定画面"></div>
+        <figcaption>提出期限設定画面。締切方式を選び、必要な日時や日数を入力します。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>締切方式を選びます</strong><span>未設定、固定日時方式、相対期限方式、月固定締切方式から選びます。</span></div>
+        <div class="step"><strong>必要な項目を入力します</strong><span>日時、何日前、締切時刻、毎月の締切日などを入力します。</span></div>
+        <div class="step"><strong>保存します</strong><span>「締切方式を保存」または「保存する」を押すと、提出期限に反映されます。</span></div>
+      </div>
+
+      <div class="operation-list">
+        <div class="operation"><strong>固定日時方式</strong>指定した日時を過ぎると提出できなくなります。</div>
+        <div class="operation"><strong>相対期限方式</strong>各シフト日の何日前、何時まで提出できるかを決めます。</div>
+        <div class="operation"><strong>月固定締切方式</strong>翌月シフトなど、月ごとの締切日を決めます。</div>
+        <div class="operation"><strong>未設定</strong>締切なしで提出できます。</div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        締切後に変更が必要な場合は、管理者が状況を確認して対応してください。
+      </div>
+    </section>
+
+    <section class="page" id="confirm">
+      <p class="section-label">Confirmed Shift</p>
+      <h2>確定シフト管理</h2>
+      <p class="lead">従業員の提出内容を見ながら、管理者が最終的な出勤・休みを決める画面です。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>提出シフトを確認できます</li>
+          <li>出勤・休み・未処理を決められます</li>
+          <li>開始時間・終了時間を変更できます</li>
+          <li>確定シフトとして保存できます</li>
+          <li>出勤者一覧を確認できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_confirm.png" alt="確定シフト管理画面"></div>
+        <figcaption>確定シフト管理画面。左で提出シフトを確認し、右で出勤確定者を確認します。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>対象日を選びます</strong><span>前の日、次の日、日付入力で確認したい日を表示します。</span></div>
+        <div class="step"><strong>提出内容を見ます</strong><span>未提出、休み提出、出勤希望を確認します。</span></div>
+        <div class="step"><strong>確定欄を選びます</strong><span>出勤、休み、未処理から選びます。</span></div>
+        <div class="step"><strong>勤務時間を確認します</strong><span>出勤の場合は、開始時間と終了時間を確認します。必要に応じて変更します。</span></div>
+        <div class="step"><strong>保存します</strong><span>「保存する」を押すと、確定シフトとして反映されます。</span></div>
+        <div class="step"><strong>出勤者一覧を確認します</strong><span>保存後、出勤確定者が右側の確定シフト一覧に表示されます。</span></div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        保存しないと反映されません。未処理は確定シフトに入りません。人件費やExcelには確定シフトが使われます。
+      </div>
+
+      <div class="callout info">
+        <strong>日跨ぎシフト</strong>
+        22:00-02:00 のような勤務も保存できます。終了時間が開始時間より早い場合は、翌日終了として扱います。
+      </div>
+
+      <div class="grid-2">
+        <figure class="screen">
+          <div class="screen-frame"><img src="images/admin_confirm_expand.png" alt="提出シフトの拡大表示"></div>
+          <figcaption>提出シフトの拡大表示。人数が多い日でも見やすく確認できます。</figcaption>
+        </figure>
+        <figure class="screen">
+          <div class="screen-frame"><img src="images/admin_confirmed_expand.png" alt="確定シフト一覧の拡大表示"></div>
+          <figcaption>確定シフト一覧の拡大表示。出勤確定者の時間を確認・更新できます。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="page" id="summary">
+      <p class="section-label">Period Summary</p>
+      <h2>期間サマリ</h2>
+      <p class="lead">指定した期間の提出状況と確定状況を、日ごとに確認する画面です。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>期間内の提出状況を確認できます</li>
+          <li>期間内の確定状況を確認できます</li>
+          <li>必要人数を日別に設定できます</li>
+          <li>未提出・休みを非表示にできます</li>
+          <li>Excel出力できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_period_summary.png" alt="期間サマリ画面"></div>
+        <figcaption>期間サマリ画面。表示期間、必要人数、提出状況、確定状況、提出一覧を確認します。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>開始日と終了日を選びます</strong><span>確認したい期間を入力します。</span></div>
+        <div class="step"><strong>表示します</strong><span>「表示する」を押すと、選んだ期間の一覧に更新されます。</span></div>
+        <div class="step"><strong>必要人数を確認・入力します</strong><span>日ごとの必要人数を確認し、必要に応じて入力します。</span></div>
+        <div class="step"><strong>提出状況と確定状況を見ます</strong><span>出勤提出、休み提出、未提出、出勤、休み、未処理を確認します。</span></div>
+        <div class="step"><strong>一覧を絞り込みます</strong><span>必要に応じて、未提出や休みを非表示にします。</span></div>
+        <div class="step"><strong>Excel出力します</strong><span>必要であれば「Excel出力」を押して、確認用のファイルを作成します。</span></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="concept">
+          <small>提出状況</small>
+          <strong>従業員の希望</strong>
+          <p>出勤提出、休み提出、未提出を数えます。管理者が確定内容を変更しても、提出状況は変わりません。</p>
+        </div>
+        <div class="concept primary">
+          <small>確定状況</small>
+          <strong>管理者の決定</strong>
+          <p>出勤、休み、未処理を数えます。未処理が0人なら全員確定済みです。</p>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        期間サマリの数字は、提出状況と確定状況を分けて見てください。提出済みでも、未処理なら確定ではありません。
+      </div>
+    </section>
+
+    <section class="page" id="daily">
+      <p class="section-label">Daily Shift</p>
+      <h2>1日シフト表</h2>
+      <p class="lead">1日の確定シフトを、タイムラインで確認・調整する画面です。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>1日の確定シフトを確認できます</li>
+          <li>タイムラインで勤務時間を確認できます</li>
+          <li>表示時間を調整できます</li>
+          <li>1日シフト表をExcel出力できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_daily_settings.png" alt="1日シフト表 対象日と表示時間"></div>
+        <figcaption>対象日と表示時間の設定。日付やタイムラインの表示範囲を変更できます。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>日付を選びます</strong><span>前の日、次の日、日付入力で確認したい日を表示します。</span></div>
+        <div class="step"><strong>確定シフトを確認します</strong><span>その日に保存されている確定シフトを確認します。</span></div>
+        <div class="step"><strong>タイムラインを見ます</strong><span>誰が何時から何時まで勤務するかを横棒で確認します。</span></div>
+        <div class="step"><strong>表示時間を調整します</strong><span>勤務時間が見切れる場合は、表示開始時間・表示終了時間を変更します。</span></div>
+        <div class="step"><strong>Excel出力します</strong><span>必要であれば、1日シフト表をExcel出力します。</span></div>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_daily_shift.png" alt="1日シフト表 タイムライン"></div>
+        <figcaption>タイムライン表示。勤務時間の重なりや空き時間を確認できます。</figcaption>
+      </figure>
+
+      <div class="callout info">
+        <strong>日跨ぎシフト</strong>
+        22:00-02:00 のような勤務は、翌日2:00まで棒が続きます。見えない場合は表示時間を広げてください。
+      </div>
+    </section>
+
+    <section class="page" id="excel">
+      <p class="section-label">Excel</p>
+      <h2>Excel出力</h2>
+      <p class="lead">確定シフトをExcelに出力できます。確認用、共有用、印刷用として使います。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>期間別の確定シフト一覧を出力できます</li>
+          <li>1日シフト表を出力できます</li>
+          <li>出勤者の勤務時間を共有できます</li>
+          <li>印刷して確認できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen screen-wide">
+        <div class="screen-frame"><img class="manual-shot" src="images/manual_excel_shift_list.png" alt="Excelの期間別確定シフト一覧"></div>
+        <figcaption>期間別の確定シフト一覧です。日ごとの出勤者、開始時間、終了時間を確認できます。</figcaption>
+      </figure>
+      <figure class="screen screen-wide">
+        <div class="screen-frame"><img class="manual-shot" src="images/manual_excel_daily_shift.png" alt="Excelの1日シフト表"></div>
+        <figcaption>1日シフト表です。タイムライン形式で勤務時間を確認でき、印刷や共有に使えます。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>出力したい期間または日付を選びます</strong><span>確定シフト管理または1日シフト表で対象を表示します。</span></div>
+        <div class="step"><strong>Excel出力を押します</strong><span>表示中の内容をもとにExcelファイルが作成されます。</span></div>
+        <div class="step"><strong>内容を確認します</strong><span>出勤者、勤務時間、日跨ぎ勤務が正しく反映されているか確認します。</span></div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        Excel出力は確定シフトをもとに作られます。休みや未処理は、基本的に出勤者一覧には出ません。
+      </div>
+    </section>
+
+    <section class="page" id="cost">
+      <p class="section-label">Cost</p>
+      <h2>概算人件費集計</h2>
+      <p class="lead">確定シフトをもとに、日別・月別の概算人件費を確認できます。</p>
+
+      <div class="feature-box">
+        <h3>この画面でできること</h3>
+        <ul>
+          <li>日別の概算人件費を確認できます</li>
+          <li>月別の概算人件費を確認できます</li>
+          <li>従業員ごとの内訳を確認できます</li>
+          <li>基本時給や計算ルールを設定できます</li>
+        </ul>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_cost_settings.png" alt="人件費集計 設定エリア"></div>
+        <figcaption>人件費設定。基本時給、休憩、時間外労働、深夜手当を確認します。</figcaption>
+      </figure>
+
+      <div class="steps">
+        <div class="step"><strong>基本時給を確認します</strong><span>人件費集計で使う基本時給を確認します。</span></div>
+        <div class="step"><strong>計算ルールを確認します</strong><span>休憩、時間外労働、深夜手当の設定を確認します。</span></div>
+        <div class="step"><strong>日付または月を選びます</strong><span>日別集計または月別集計の対象を選びます。</span></div>
+        <div class="step"><strong>表示します</strong><span>「表示する」を押すと、選んだ日付または月の集計が表示されます。</span></div>
+        <div class="step"><strong>総人件費を確認します</strong><span>総人件費、総実働時間、総労働分数を確認します。</span></div>
+        <div class="step"><strong>個人別の内訳を見ます</strong><span>必要に応じて、従業員ごとの勤務時間と人件費を確認します。</span></div>
+      </div>
+
+      <figure class="screen">
+        <div class="screen-frame"><img src="images/admin_cost.png" alt="人件費集計結果"></div>
+        <figcaption>人件費集計結果。日別・月別の総人件費と、従業員別の内訳を確認できます。</figcaption>
+      </figure>
+
+      <div class="callout warn">
+        <strong>注意点</strong>
+        人件費は概算です。確定シフトをもとに計算されます。提出シフトだけでは人件費には入りません。
+      </div>
+    </section>
+
+    <section class="page" id="examples">
+      <p class="section-label">Examples</p>
+      <h2>よくある操作</h2>
+      <p class="lead">現場でよく使う操作をまとめています。</p>
+
+      <div class="feature-box">
+        <h3>このページで確認できること</h3>
+        <ul>
+          <li>未提出者を休みにする方法</li>
+          <li>未提出者を出勤にする方法</li>
+          <li>休み希望を出勤に変更する方法</li>
+          <li>勤務時間を変更する方法</li>
+          <li>Excelや人件費を確認する方法</li>
+        </ul>
+      </div>
+
+      <div class="operation-list">
+        <div class="operation"><strong>未提出者を休みにする</strong>確定シフト管理で「未提出者を休みとして保存する」にチェックし、保存します。</div>
+        <div class="operation"><strong>未提出者を出勤にする</strong>対象スタッフの確定欄で「出勤」を選び、開始時間・終了時間を入力して保存します。</div>
+        <div class="operation"><strong>休み希望の人を出勤にする</strong>提出内容を確認し、確定欄を「出勤」に変えて時間を入力します。</div>
+        <div class="operation"><strong>勤務時間を変更する</strong>開始時間・終了時間を変更し、保存します。</div>
+        <div class="operation"><strong>22:00-02:00 を確定する</strong>開始を22:00、終了を02:00にして保存します。翌日終了として扱われます。</div>
+        <div class="operation"><strong>必要人数を変更する</strong>期間サマリで必要人数を入力し、人数不足がないか確認します。</div>
+        <div class="operation"><strong>Excelに出力する</strong>対象期間または対象日を表示し、Excel出力を押します。</div>
+        <div class="operation"><strong>人件費を確認する</strong>人件費集計で日付または月を選び、「表示する」を押します。</div>
+      </div>
+
+      <div class="callout info">
+        <strong>基本の流れ</strong>
+        対象日・期間を選ぶ → 内容を確認する → 必要な項目を入力する → 保存する → 反映を確認する、の順番で進めます。
+      </div>
+    </section>
+
+    <section class="page" id="trouble">
+      <p class="section-label">Notes</p>
+      <h2>注意点・困ったとき</h2>
+      <p class="lead">迷いやすい点をまとめています。操作後は、画面に反映されているか確認してください。</p>
+
+      <div class="grid-2">
+        <div>
+          <h3>注意点</h3>
+          <ul class="checklist">
+            <li>保存しないと確定シフトには反映されません。</li>
+            <li>人件費、Excel、1日シフト表は確定シフトをもとに作られます。</li>
+            <li>提出シフトは従業員の希望です。実際の勤務予定ではありません。</li>
+            <li>スタッフや確定シフトの削除は慎重に行ってください。</li>
+            <li>実際に勤務しないスタッフが表示されていないか確認してください。</li>
+          </ul>
+        </div>
+        <div>
+          <h3>困ったとき</h3>
+          <ul class="checklist">
+            <li>画面が古い場合は、ブラウザを再読み込みします。</li>
+            <li>LINEで開けない場合は、通信状態と案内されたリンクを確認します。</li>
+            <li>管理画面に反映されない場合は、対象日と保存操作を確認します。</li>
+            <li>入力内容が見えない場合は、管理者に確認してください。</li>
+            <li>入力後は、確定シフト一覧や1日シフト表で反映を確認します。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout danger">
+        <strong>削除操作について</strong>
+        確定シフトやスタッフを削除・無効化すると、表示や集計に影響します。削除前に対象日、対象スタッフ、出力済みExcelを確認してください。
+      </div>
+
+      <p class="footer-note">この説明書は、ブラウザで開いてPDF保存できます。店舗での説明や確認用として利用してください。</p>
+    </section>
+  </main>
+</body>
+</html>

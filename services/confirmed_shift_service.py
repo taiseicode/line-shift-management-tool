@@ -46,8 +46,8 @@ def validate_confirmed_shift_time(start_time: str, end_time: str):
         return "時刻の形式が不正です（HH:MM）"
     if not (is_quarter_hour_time(start_time) and is_quarter_hour_time(end_time)):
         return "確定時間は15分単位（00 / 15 / 30 / 45）で入力してください"
-    if hhmm_to_minutes(end_time) <= hhmm_to_minutes(start_time):
-        return "終了時間は開始時間より後にしてください"
+    if hhmm_to_minutes(end_time) == hhmm_to_minutes(start_time):
+        return "開始時間と終了時間が同じです"
     return None
 
 

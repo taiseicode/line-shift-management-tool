@@ -299,8 +299,10 @@ def _build_home_page_context():
     daily_labor = build_daily_summary(today)
     gross_minutes = sum(int(user["gross_minutes"] or 0) for user in daily_labor["users"])
 
-    ctx["daily_shift_graph_start_time"] = get_daily_shift_graph_start_time()
-    ctx["daily_shift_graph_end_time"] = get_daily_shift_graph_end_time()
+    (
+        ctx["daily_shift_graph_start_time"],
+        ctx["daily_shift_graph_end_time"],
+    ) = _auto_daily_shift_graph_range(confirmed_today)
     ctx["timeline_slots"] = _build_timeline_slots(ctx["daily_shift_graph_start_time"], ctx["daily_shift_graph_end_time"])
     ctx["today_timeline_shifts"] = [
         {
@@ -308,6 +310,11 @@ def _build_home_page_context():
             "name": shift["name"] or "",
             "start_time": round_time_to_quarter(shift["start_time"] or ""),
             "end_time": round_time_to_quarter(shift["end_time"] or ""),
+            "bar": _build_timeline_bar(
+                round_time_to_quarter(shift["start_time"] or ""),
+                round_time_to_quarter(shift["end_time"] or ""),
+                ctx["timeline_slots"],
+            ),
             "cells": _build_timeline_cells(
                 round_time_to_quarter(shift["start_time"] or ""),
                 round_time_to_quarter(shift["end_time"] or ""),
@@ -581,6 +588,34 @@ def _build_timeline_cells(start_time: str, end_time: str, slots):
     ]
 
 
+def _build_timeline_bar(start_time: str, end_time: str, slots):
+    if not slots:
+        return {"visible": False, "left": 0, "width": 0}
+    range_start = int(slots[0]["start"])
+    range_end = int(slots[-1]["end"])
+    range_minutes = range_end - range_start
+    if range_minutes <= 0:
+        return {"visible": False, "left": 0, "width": 0}
+
+    start_minutes = _normalize_time_for_range(start_time, range_start)
+    end_minutes = _normalize_time_for_range(end_time, range_start)
+    if start_minutes is None or end_minutes is None:
+        return {"visible": False, "left": 0, "width": 0}
+    if end_minutes <= start_minutes:
+        end_minutes += 24 * 60
+
+    visible_start = max(start_minutes, range_start)
+    visible_end = min(end_minutes, range_end)
+    if visible_end <= visible_start:
+        return {"visible": False, "left": 0, "width": 0}
+
+    return {
+        "visible": True,
+        "left": round(((visible_start - range_start) / range_minutes) * 100, 4),
+        "width": round(((visible_end - visible_start) / range_minutes) * 100, 4),
+    }
+
+
 def _build_confirm_page_context():
     ctx = _build_admin_shell_context("confirm")
     ctx["quarter_hour_options"] = [
@@ -805,6 +840,20 @@ def admin_daily_shift_page():
     if not session.get("logged_in"):
         return redirect("/login")
     return make_response(render_template("admin_daily_shift.html", **_build_daily_shift_page_context()))
+
+
+@admin_bp.route("/admin/manual", methods=["GET"])
+def admin_manual_page():
+    if not session.get("logged_in"):
+        return redirect("/login")
+    return make_response(render_template("manual/index.html", **_build_admin_shell_context("manual")))
+
+
+@admin_bp.route("/admin/manual/pdf", methods=["GET"])
+def admin_manual_pdf_page():
+    if not session.get("logged_in"):
+        return redirect("/login")
+    return make_response(render_template("manual/pdf.html"))
 
 
 @admin_bp.route("/admin/confirm_shift", methods=["POST"])
@@ -2197,6 +2246,8 @@ def admin_export_confirmed():
     by_date = {}
     for row in rows:
         by_date.setdefault(row["date"], []).append(row)
+    for ymd, day_rows in by_date.items():
+        by_date[ymd] = sorted(day_rows, key=_confirmed_export_sort_key)
 
     daily_costs = {}
     for current_date in export_days:
@@ -2331,6 +2382,22 @@ def admin_export_confirmed():
         as_attachment=True,
         download_name=f"confirmed_shifts_{to_ymd(start_d)}_{to_ymd(end_d)}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+def _confirmed_export_sort_key(row):
+    start_minutes = _time_to_minutes(row["start_time"] or "")
+    end_minutes = _time_to_minutes(row["end_time"] or "")
+    display_order = row["display_order"] if "display_order" in row.keys() else None
+    try:
+        display_order_value = int(display_order) if display_order is not None else 999999
+    except (TypeError, ValueError):
+        display_order_value = 999999
+
+    return (
+        start_minutes if start_minutes is not None else 999999,
+        end_minutes if end_minutes is not None else 999999,
+        display_order_value,
+        row["name"] or "",
     )
 
 def _time_to_minutes(time_text: str):

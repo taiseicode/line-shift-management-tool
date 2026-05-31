@@ -91,6 +91,150 @@
 </div>
 {% endblock %}
 
+{% block extra_head %}
+<style>
+.labor-summary-card {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: #fff;
+  padding: 18px;
+}
+.labor-summary-period {
+  color: var(--muted-text);
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.labor-total-hero {
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.labor-total-label {
+  color: var(--muted-text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.labor-total-value {
+  color: #10243f;
+  font-size: clamp(1.8rem, 4vw, 2.45rem);
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: 4px;
+}
+.labor-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.labor-mini-item {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #fbfcfe;
+  padding: 10px 12px;
+}
+.labor-mini-label,
+.labor-settings-muted {
+  color: var(--muted-text);
+  font-size: 0.78rem;
+}
+.labor-mini-value {
+  color: #172033;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+.labor-settings-muted {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 10px;
+}
+.labor-user-list {
+  display: grid;
+  gap: 10px;
+}
+.labor-user-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.labor-user-card.is-high-cost {
+  border-color: #f1d7a6;
+  background: #fffdf8;
+}
+.labor-user-card summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+}
+.labor-user-card summary::-webkit-details-marker {
+  display: none;
+}
+.labor-user-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.labor-user-name {
+  color: #172033;
+  font-weight: 800;
+}
+.labor-user-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.labor-user-cost {
+  color: #10243f;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.labor-user-hours {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+}
+.labor-badge-night {
+  border-radius: 999px;
+  background: #f0e7ff;
+  color: #6d3fb5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+.labor-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  border-top: 1px solid var(--border-color);
+  padding: 12px 14px 14px;
+  color: #364254;
+  font-size: 0.86rem;
+}
+.labor-detail-grid span {
+  color: var(--muted-text);
+}
+@media (max-width: 575.98px) {
+  .labor-mini-grid,
+  .labor-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .labor-user-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .labor-user-meta {
+    justify-content: flex-start;
+  }
+}
+</style>
+{% endblock %}
+
 {% block extra_scripts %}
 <script>
 function formatHours(value) {
@@ -139,6 +283,69 @@ function renderSummaryResult(data, labelKey) {
       <div>総労働分数: ${data.total_minutes} 分</div>
       <div>総人件費: ¥${formatYen(data.total_labor_cost)}</div>
       <div class="mt-3">${detailBlocks}</div>
+    </div>
+  `;
+}
+
+function formatEnabled(value) {
+  return value ? "有効" : "無効";
+}
+
+function renderSummaryResult(data, labelKey) {
+  const users = Array.isArray(data.users) ? data.users : [];
+  const detailBlocks = users.length
+    ? users.map((user) => `
+        <details class="labor-user-card ${Number(user.wage || 0) >= 8000 ? "is-high-cost" : ""}">
+          <summary>
+            <div class="labor-user-summary">
+              <div>
+                <div class="labor-user-name">${user.name || "未設定"}</div>
+                <div class="labor-user-hours">勤務時間 ${formatHours(user.actual_hours)}時間</div>
+              </div>
+              <div class="labor-user-meta">
+                ${Number(user.night_hours || 0) > 0 ? '<span class="labor-badge-night">深夜あり</span>' : ""}
+                <span class="labor-user-cost">¥${formatYen(user.wage)}</span>
+              </div>
+            </div>
+          </summary>
+          <div class="labor-detail-grid">
+            <div><span>確定勤務</span><br>${user.shift_time || "未集計"}</div>
+            <div><span>休憩時間</span><br>${user.break_label || `${user.break_minutes || 0}分`}</div>
+            <div><span>通常勤務</span><br>${formatHours(user.normal_hours)}時間</div>
+            <div><span>時間外</span><br>${user.overtime_label || `${formatHours(user.overtime_hours)}時間`}</div>
+            <div><span>深夜勤務</span><br>${user.night_label || `${formatHours(user.night_hours)}時間`}</div>
+            <div><span>通常賃金</span><br>¥${formatYen(user.normal_wage)}</div>
+            <div><span>時間外割増</span><br>¥${formatYen(user.overtime_extra_wage)}</div>
+            <div><span>深夜割増</span><br>¥${formatYen(user.night_extra_wage)}</div>
+          </div>
+        </details>
+      `).join("")
+    : '<div class="text-muted small mt-2">対象データはありません。</div>';
+
+  return `
+    <div class="labor-summary-card">
+      <div class="labor-summary-period">${data[labelKey]}</div>
+      <div class="labor-total-hero">
+        <div class="labor-total-label">総人件費</div>
+        <div class="labor-total-value">¥${formatYen(data.total_labor_cost)}</div>
+      </div>
+      <div class="labor-mini-grid">
+        <div class="labor-mini-item">
+          <div class="labor-mini-label">総実働時間</div>
+          <div class="labor-mini-value">${formatHours(data.total_hours)}時間</div>
+        </div>
+        <div class="labor-mini-item">
+          <div class="labor-mini-label">総労働分数</div>
+          <div class="labor-mini-value">${formatYen(data.total_minutes)}分</div>
+        </div>
+      </div>
+      <div class="labor-settings-muted">
+        <span>基本時給: ¥${formatYen(data.base_hourly_wage || data.hourly_wage)}</span>
+        <span>休憩ルール: ${formatEnabled(data.break_enabled)}</span>
+        <span>時間外: ${formatEnabled(data.overtime_enabled)}</span>
+        <span>深夜手当: ${formatEnabled(data.night_enabled)}</span>
+      </div>
+      <div class="labor-user-list mt-3">${detailBlocks}</div>
     </div>
   `;
 }

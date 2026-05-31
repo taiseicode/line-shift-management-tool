@@ -337,13 +337,17 @@
     }
     .timeline-header-slot {
       height: 40px;
-      font-size: 0.7rem;
+      font-size: 0.64rem;
       font-weight: 750;
       color: #526173;
       display: flex;
       align-items: center;
       justify-content: center;
       background: #f8fafc;
+      line-height: 1;
+      overflow: hidden;
+      padding: 0 1px;
+      white-space: nowrap;
     }
     .timeline-hour-even {
       background: #f8fafc !important;
@@ -407,8 +411,8 @@
   <div class="container-fluid admin-shell">
     <div class="row">
       <aside class="col-lg-2 admin-sidebar">
-        <div class="admin-brand">Shift Admin</div>
-        <div class="admin-brand-sub">管理ダッシュボード</div>
+        <div class="admin-brand">シフト便</div>
+        <div class="admin-brand-sub">シフト管理ツール</div>
 
         <nav class="nav flex-column sidebar-nav">
           <a class="nav-link {% if active_nav == 'home' %}active{% endif %}" href="/admin">ホーム</a>
@@ -417,6 +421,7 @@
           <a class="nav-link {% if active_nav == 'deadline' %}active{% endif %}" id="adminDeadlineNavLink" href="/admin/deadline?start={{ start_value }}&end={{ end_value }}">シフト提出期限</a>
           <a class="nav-link {% if active_nav == 'cost' %}active{% endif %}" id="adminCostNavLink" href="/admin/cost?start={{ start_value }}&end={{ end_value }}">人件費集計</a>
           <a class="nav-link {% if active_nav == 'users' %}active{% endif %}" id="adminUsersNavLink" href="/admin/users?start={{ start_value }}&end={{ end_value }}">登録ユーザー一覧</a>
+          <a class="nav-link {% if active_nav == 'manual' %}active{% endif %}" id="adminManualNavLink" href="/admin/manual">使い方</a>
         </nav>
 
         <div class="sidebar-footer">
@@ -435,6 +440,8 @@
       "admin_confirm_sort",
       "admin_confirm_target_date",
       "admin_confirm_save_unsubmitted_as_off",
+      "admin_period_summary_hide_unsubmitted",
+      "admin_period_summary_hide_off",
       "admin_confirm_range_start",
       "admin_confirm_range_end",
       "admin_daily_shift_date",

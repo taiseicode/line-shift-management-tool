@@ -97,7 +97,7 @@ def get_confirmed_shifts_range(start_ymd: str, end_ymd: str):
                    COALESCE(NULLIF(cs.start_time, ''), se.start_time) AS start_time,
                    COALESCE(NULLIF(cs.end_time, ''), se.end_time) AS end_time,
                    cs.is_assigned, cs.source_entry_id,
-                   cs.created_at, cs.updated_at, u.name, u.active
+                   cs.created_at, cs.updated_at, u.name, u.active, u.display_order
             FROM confirmed_shifts cs
             JOIN users u ON cs.user_id = u.id
             LEFT JOIN shift_entries se ON se.id = cs.source_entry_id

@@ -73,7 +73,7 @@
       </div>
     {% else %}
       <div class="timeline-scroll">
-        <div class="timeline-table" style="--timeline-slot-count: {{ timeline_slots|length }};">
+        <div class="timeline-table timeline-table-readonly" style="--timeline-slot-count: {{ timeline_slots|length }};" data-graph-start="{{ timeline_slots[0].start if timeline_slots else 0 }}" data-graph-end="{{ timeline_slots[-1].end if timeline_slots else 0 }}">
           <div class="d-flex align-items-end fw-semibold small border-bottom pb-1">
             <div class="timeline-name pe-2">名前</div>
             <div class="timeline-time pe-2">勤務開始</div>
@@ -91,8 +91,11 @@
               <div class="timeline-time pe-2">{{ shift.start_time }}</div>
               <div class="timeline-time pe-2">{{ shift.end_time }}</div>
               <div class="timeline-grid">
+                {% if shift.bar.visible %}
+                  <div class="timeline-bar" style="left: {{ shift.bar.left }}%; width: {{ shift.bar.width }}%;"></div>
+                {% endif %}
                 {% for cell in shift.cells %}
-                  <div class="timeline-slot timeline-hour-{{ 'even' if cell.hour_band % 2 == 0 else 'odd' }} {% if cell.active %}timeline-slot-active{% endif %} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" style="width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px; min-width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px;"></div>
+                  <div class="timeline-slot timeline-hour-{{ 'even' if cell.hour_band % 2 == 0 else 'odd' }} {% if loop.index0 % 2 == 0 %}timeline-hour-boundary{% endif %}" style="width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px; min-width: {{ (((timeline_slots[loop.index0].end - timeline_slots[loop.index0].start) / 30) * 34)|round(2) }}px;"></div>
                 {% endfor %}
               </div>
             </div>
