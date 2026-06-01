@@ -388,10 +388,27 @@ def _init_sqlite_tables(c):
             message TEXT NOT NULL,
             user_ids TEXT,
             last_sent_at TEXT,
+            last_checked_at TEXT,
+            last_run_status TEXT,
+            last_skip_reason TEXT,
+            last_target_count INTEGER DEFAULT 0,
+            last_sent_count INTEGER DEFAULT 0,
+            last_failed_count INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    notification_rule_columns = _get_table_columns_with_cursor(c, "notification_rules")
+    for column_name, column_type in (
+        ("last_checked_at", "TEXT"),
+        ("last_run_status", "TEXT"),
+        ("last_skip_reason", "TEXT"),
+        ("last_target_count", "INTEGER DEFAULT 0"),
+        ("last_sent_count", "INTEGER DEFAULT 0"),
+        ("last_failed_count", "INTEGER DEFAULT 0"),
+    ):
+        if column_name not in notification_rule_columns:
+            c.execute(f"ALTER TABLE notification_rules ADD COLUMN {column_name} {column_type}")
 
 
 def _init_postgres_tables(c):
@@ -516,10 +533,22 @@ def _init_postgres_tables(c):
             message TEXT NOT NULL,
             user_ids TEXT,
             last_sent_at TIMESTAMP,
+            last_checked_at TIMESTAMP,
+            last_run_status TEXT,
+            last_skip_reason TEXT,
+            last_target_count INTEGER DEFAULT 0,
+            last_sent_count INTEGER DEFAULT 0,
+            last_failed_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMP")
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_run_status TEXT")
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_skip_reason TEXT")
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_target_count INTEGER DEFAULT 0")
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_sent_count INTEGER DEFAULT 0")
+    c.execute("ALTER TABLE notification_rules ADD COLUMN IF NOT EXISTS last_failed_count INTEGER DEFAULT 0")
 
 
 def init_tables():

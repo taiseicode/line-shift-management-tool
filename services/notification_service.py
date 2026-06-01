@@ -5,7 +5,7 @@ from db import get_conn, using_postgres
 from repositories.settings_repository import get_setting, get_settings, upsert_setting
 from services.deadline_service import get_active_deadline_config, get_submission_deadline_status
 from services.line_notify_service import send_line_message
-from utils import is_valid_time_hhmm, now_jst, parse_ymd, to_ymd, today_jst
+from utils import APP_TIMEZONE, is_valid_time_hhmm, now_jst, parse_ymd, to_ymd, today_jst
 
 
 NOTIFY_DEADLINE_ENABLED_KEY = "notify_deadline_reminder_enabled"
@@ -50,6 +50,11 @@ SCHEDULE_LABELS = {
     SCHEDULE_WEEKLY: "毎週",
     SCHEDULE_MONTHLY: "毎月",
 }
+TIMEZONE_NAME = "Asia/Tokyo"
+STATUS_CRON_NOT_RUN = "cron未実行"
+STATUS_SENT = "送信済み"
+STATUS_SKIPPED = "スキップ"
+STATUS_FAILED = "送信失敗"
 
 
 def _is_enabled(value) -> bool:
@@ -98,6 +103,50 @@ def _dumps_user_ids(user_ids):
     return json.dumps(normalized, ensure_ascii=False)
 
 
+def _format_dt(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M")
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    return text[:16] if len(text) >= 16 else text
+
+
+def _normalize_current(current=None):
+    if current is None:
+        return now_jst()
+    if getattr(current, "tzinfo", None) is not None:
+        return current.astimezone(APP_TIMEZONE).replace(tzinfo=None)
+    return current
+
+
+def _next_rule_run_at(rule, current=None):
+    current = _normalize_current(current)
+    send_time = rule.get("send_time") or "00:00"
+    if not is_valid_time_hhmm(send_time):
+        return ""
+    hour, minute = [int(part) for part in send_time.split(":", 1)]
+    schedule_type = rule.get("schedule_type")
+
+    for day_offset in range(0, 370):
+        candidate_date = current.date() + timedelta(days=day_offset)
+        if schedule_type == SCHEDULE_WEEKLY and rule.get("weekday") is not None:
+            if candidate_date.weekday() != int(rule["weekday"]):
+                continue
+        if schedule_type == SCHEDULE_MONTHLY and rule.get("month_day") is not None:
+            if candidate_date.day != int(rule["month_day"]):
+                continue
+        candidate = datetime(candidate_date.year, candidate_date.month, candidate_date.day, hour, minute)
+        if candidate >= current:
+            return candidate.strftime("%Y-%m-%d %H:%M")
+    return ""
+
+
 def _format_rule(row):
     item = _row_to_dict(row)
     item["id"] = int(item["id"])
@@ -108,6 +157,11 @@ def _format_rule(row):
     item["schedule_label"] = SCHEDULE_LABELS.get(item.get("schedule_type"), item.get("schedule_type") or "")
     item["target_label"] = TARGET_LABELS.get(item.get("target_type"), item.get("target_type") or "")
     item["timing_label"] = format_rule_timing(item)
+    item["next_run_display"] = _next_rule_run_at(item)
+    item["last_sent_display"] = _format_dt(item.get("last_sent_at")) or "未送信"
+    item["last_checked_display"] = _format_dt(item.get("last_checked_at"))
+    item["last_status_display"] = item.get("last_run_status") or STATUS_CRON_NOT_RUN
+    item["last_skip_reason_display"] = item.get("last_skip_reason") or ""
     return item
 
 
@@ -218,21 +272,22 @@ def get_recipients(target_type: str, target_date: str = "", user_ids=None):
 
 
 def _insert_notification_log(c, title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
+    created_at = now_jst().strftime("%Y-%m-%d %H:%M:%S")
     if using_postgres():
         row = c.execute("""
             INSERT INTO notification_logs(
-                title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key
+                title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key, created_at
             )
-            VALUES(?, ?, ?, ?, 0, 0, ?, ?)
+            VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?)
             RETURNING id
-        """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key)).fetchone()
+        """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key, created_at)).fetchone()
         return int(row["id"])
     c.execute("""
         INSERT INTO notification_logs(
-            title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key
+            title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key, created_at
         )
-        VALUES(?, ?, ?, ?, 0, 0, ?, ?)
-    """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key))
+        VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?)
+    """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key, created_at))
     return int(c.lastrowid)
 
 
@@ -595,19 +650,7 @@ def _format_notification_log(row):
         item["target_type_display"] = "自動ルール"
     else:
         item["target_type_display"] = TARGET_LABELS.get(item.get("target_type"), item.get("target_type") or "")
-    created_at = item.get("created_at")
-    if isinstance(created_at, datetime):
-        item["created_at_display"] = created_at.strftime("%Y-%m-%d %H:%M")
-        return item
-
-    text = str(created_at or "").strip()
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            item["created_at_display"] = datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M")
-            return item
-        except ValueError:
-            pass
-    item["created_at_display"] = text[:16] if len(text) >= 16 else text
+    item["created_at_display"] = _format_dt(item.get("created_at"))
     return item
 
 
@@ -629,19 +672,23 @@ def _find_shift_date_with_deadline_on(deadline_date):
     return None
 
 
-def _rule_matches_now(rule, current):
+def _rule_match_status(rule, current):
     if int(rule.get("enabled") or 0) != 1:
-        return False
+        return False, "無効です"
     if not _time_has_passed(rule.get("send_time") or "", current):
-        return False
+        return False, "送信時刻前です"
     schedule_type = rule.get("schedule_type")
     if schedule_type == SCHEDULE_DAILY:
-        return True
+        return True, None
     if schedule_type == SCHEDULE_WEEKLY:
-        return rule.get("weekday") is not None and int(rule["weekday"]) == current.weekday()
+        if rule.get("weekday") is not None and int(rule["weekday"]) == current.weekday():
+            return True, None
+        return False, "曜日が一致しません"
     if schedule_type == SCHEDULE_MONTHLY:
-        return rule.get("month_day") is not None and int(rule["month_day"]) == current.day
-    return False
+        if rule.get("month_day") is not None and int(rule["month_day"]) == current.day:
+            return True, None
+        return False, "日付が一致しません"
+    return False, "通知タイプが不正です"
 
 
 def _rule_run_key(rule, current):
@@ -682,6 +729,49 @@ def _update_rule_last_sent(rule_id: int, sent_at):
         conn.close()
 
 
+def _update_rule_run_result(rule_id: int, current, status: str, skip_reason: str = None, target_count: int = 0, sent_count: int = 0, failed_count: int = 0, mark_sent: bool = False):
+    checked_at = current.strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        if mark_sent:
+            c.execute("""
+                UPDATE notification_rules
+                SET last_checked_at = ?, last_sent_at = ?, last_run_status = ?, last_skip_reason = ?,
+                    last_target_count = ?, last_sent_count = ?, last_failed_count = ?, updated_at = ?
+                WHERE id = ?
+            """, (
+                checked_at,
+                checked_at,
+                status,
+                skip_reason,
+                int(target_count or 0),
+                int(sent_count or 0),
+                int(failed_count or 0),
+                now_jst().strftime("%Y-%m-%d %H:%M:%S"),
+                int(rule_id),
+            ))
+        else:
+            c.execute("""
+                UPDATE notification_rules
+                SET last_checked_at = ?, last_run_status = ?, last_skip_reason = ?,
+                    last_target_count = ?, last_sent_count = ?, last_failed_count = ?, updated_at = ?
+                WHERE id = ?
+            """, (
+                checked_at,
+                status,
+                skip_reason,
+                int(target_count or 0),
+                int(sent_count or 0),
+                int(failed_count or 0),
+                now_jst().strftime("%Y-%m-%d %H:%M:%S"),
+                int(rule_id),
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _resolve_rule_target(rule, current):
     target_type = rule.get("target_type")
     mode = rule.get("target_date_mode") or TARGET_DATE_TODAY
@@ -702,34 +792,48 @@ def _resolve_rule_target(rule, current):
 
 
 def run_due_notifications(current=None):
-    current = current or now_jst()
+    current = _normalize_current(current)
     ensure_legacy_notification_rules_migrated()
+    rules = get_notification_rules()
     results = []
-    for rule in get_notification_rules():
-        if not _rule_matches_now(rule, current):
+
+    for rule in rules:
+        matched, reason = _rule_match_status(rule, current)
+        base = {
+            "rule_id": rule["id"],
+            "name": rule["name"],
+            "matched": matched,
+            "target_count": 0,
+            "sent_count": 0,
+            "failed_count": 0,
+            "skipped_reason": reason,
+        }
+        if not matched:
+            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+            results.append(base)
             continue
+
         run_key = _rule_run_key(rule, current)
         if _has_rule_run_sent(rule["id"], run_key):
+            reason = "本日は送信済みです"
+            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+            results.append({**base, "skipped_reason": reason})
             continue
+
         target_date, recipient_target_type, user_ids = _resolve_rule_target(rule, current)
         if rule["target_type"] in {TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED} and not target_date:
-            results.append({
-                "type": "rule",
-                "rule_id": rule["id"],
-                "name": rule["name"],
-                "skipped": "target_date_not_found",
-            })
+            reason = "対象日が見つかりません"
+            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+            results.append({**base, "target_date": target_date, "skipped_reason": reason})
             continue
+
         recipients = get_recipients(recipient_target_type, target_date, user_ids)
         if not recipients:
-            results.append({
-                "type": "rule",
-                "rule_id": rule["id"],
-                "name": rule["name"],
-                "target_date": target_date,
-                "skipped": "no_recipients",
-            })
+            reason = "対象ユーザーが0人のため送信しませんでした"
+            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason, target_count=0)
+            results.append({**base, "target_date": target_date, "skipped_reason": reason})
             continue
+
         result = send_notification(
             rule.get("title") or rule["name"],
             rule["message"],
@@ -740,12 +844,34 @@ def run_due_notifications(current=None):
             notification_rule_id=rule["id"],
             rule_run_key=run_key,
         )
-        _update_rule_last_sent(rule["id"], current)
+        status = STATUS_SENT if int(result["failed_count"] or 0) == 0 else STATUS_FAILED
+        _update_rule_run_result(
+            rule["id"],
+            current,
+            status,
+            None,
+            target_count=result["target_count"],
+            sent_count=result["sent_count"],
+            failed_count=result["failed_count"],
+            mark_sent=True,
+        )
         results.append({
+            **base,
             **result,
-            "type": "rule",
-            "rule_id": rule["id"],
-            "name": rule["name"],
             "target_date": target_date,
+            "skipped_reason": None,
         })
-    return results
+
+    sent_rules = sum(1 for item in results if item["matched"] and item["skipped_reason"] is None)
+    skipped_rules = sum(1 for item in results if item["skipped_reason"])
+    return {
+        "ok": True,
+        "now": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": TIMEZONE_NAME,
+        "checked_rules": len(rules),
+        "matched_rules": sum(1 for item in results if item["matched"]),
+        "sent_rules": sent_rules,
+        "sent_notifications": sum(int(item.get("sent_count") or 0) for item in results),
+        "skipped_rules": skipped_rules,
+        "results": results,
+    }

@@ -17,6 +17,46 @@
 {% if error %}
 <div class="alert alert-danger py-2">{{ error }}</div>
 {% endif %}
+{% if run_result %}
+<div class="page-card card mb-3">
+  <div class="card-body">
+    <h2 class="h5 mb-3">自動通知実行結果</h2>
+    <div class="row g-2 mb-3">
+      <div class="col-md-3"><div class="bg-light rounded-3 p-3"><div class="form-label mb-1">実行日時</div><strong>{{ run_result.now }}</strong></div></div>
+      <div class="col-md-2"><div class="bg-light rounded-3 p-3"><div class="form-label mb-1">対象ルール</div><strong>{{ run_result.matched_rules }}</strong></div></div>
+      <div class="col-md-2"><div class="bg-light rounded-3 p-3"><div class="form-label mb-1">送信数</div><strong>{{ run_result.sent_notifications }}</strong></div></div>
+      <div class="col-md-2"><div class="bg-light rounded-3 p-3"><div class="form-label mb-1">スキップ</div><strong>{{ run_result.skipped_rules }}</strong></div></div>
+      <div class="col-md-3"><div class="bg-light rounded-3 p-3"><div class="form-label mb-1">タイムゾーン</div><strong>{{ run_result.timezone }}</strong></div></div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>ルール</th>
+            <th>判定</th>
+            <th>対象</th>
+            <th>成功</th>
+            <th>失敗</th>
+            <th>スキップ理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in run_result.results %}
+          <tr>
+            <td>{{ item.name }}</td>
+            <td>{{ '対象' if item.matched else '対象外' }}</td>
+            <td>{{ item.target_count }}</td>
+            <td>{{ item.sent_count }}</td>
+            <td>{{ item.failed_count }}</td>
+            <td>{{ item.skipped_reason or '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="page-card card mb-3">
   <div class="card-body">
@@ -78,7 +118,17 @@
             <h2 class="h5 mb-1">自動通知ルール</h2>
             <div class="muted-note">毎日・毎週・毎月の通知ルールを管理します。</div>
           </div>
-          <a href="/admin/notifications#ruleForm" class="btn btn-outline-primary btn-sm">ルール追加</a>
+          <div class="d-flex gap-2">
+            <form method="POST" action="/admin/notifications/run-now">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+              <button type="submit" class="btn btn-primary btn-sm">自動通知を今すぐ実行</button>
+            </form>
+            <a href="/admin/notifications#ruleForm" class="btn btn-outline-primary btn-sm">ルール追加</a>
+          </div>
+        </div>
+        <div class="alert alert-info py-2">
+          自動通知は、設定時刻になったあと /internal/run-notifications が実行された時に送信されます。
+          Render単体では自動実行されないため、cron-job.org などの外部cron設定が必要です。
         </div>
         <div class="table-responsive">
           <table class="table table-striped align-middle">
@@ -89,6 +139,10 @@
                 <th>通知タイプ</th>
                 <th>送信タイミング</th>
                 <th>対象者</th>
+                <th>次回送信予定</th>
+                <th>最終送信日時</th>
+                <th>最終実行結果</th>
+                <th>スキップ理由</th>
                 <th>編集</th>
                 <th>削除</th>
               </tr>
@@ -109,6 +163,15 @@
                 <td>{{ item['schedule_label'] }}</td>
                 <td>{{ item['timing_label'] }}</td>
                 <td>{{ item['target_label'] }}</td>
+                <td>{{ item['next_run_display'] }}</td>
+                <td>{{ item['last_sent_display'] }}</td>
+                <td>
+                  {{ item['last_status_display'] }}
+                  {% if item['last_checked_display'] %}
+                  <div class="small text-muted">{{ item['last_checked_display'] }}</div>
+                  {% endif %}
+                </td>
+                <td>{{ item['last_skip_reason_display'] }}</td>
                 <td><a class="btn btn-sm btn-outline-secondary" href="/admin/notifications?edit_rule_id={{ item['id'] }}#ruleForm">編集</a></td>
                 <td>
                   <form method="POST" action="/admin/notifications/rules/delete" onsubmit="return confirm('この通知ルールを削除しますか？');">
@@ -120,7 +183,7 @@
               </tr>
               {% else %}
               <tr>
-                <td colspan="7" class="text-center text-muted py-4">自動通知ルールはまだありません。</td>
+                <td colspan="11" class="text-center text-muted py-4">自動通知ルールはまだありません。</td>
               </tr>
               {% endfor %}
             </tbody>

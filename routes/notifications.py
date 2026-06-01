@@ -58,6 +58,7 @@ def _notifications_context(status="", error=""):
         "logs": get_notification_logs(20),
         "rules": get_notification_rules(),
         "edit_rule": edit_rule,
+        "run_result": session.pop("notification_run_result", None),
         "status": status,
         "error": error,
     }
@@ -193,6 +194,21 @@ def admin_notifications_preview_count():
     return jsonify({"count": len(recipients)})
 
 
+@notifications_bp.route("/admin/notifications/run-now", methods=["POST"])
+def admin_notifications_run_now():
+    if not session.get("logged_in"):
+        return redirect("/login")
+    csrf_error = validate_csrf_or_400()
+    if csrf_error:
+        return csrf_error
+    try:
+        result = run_due_notifications()
+        session["notification_run_result"] = result
+    except Exception as exc:
+        return _redirect_with_message(error=f"自動通知実行中にエラーが発生しました: {exc}")
+    return _redirect_with_message(status="自動通知判定を実行しました。")
+
+
 @notifications_bp.route("/internal/run-notifications", methods=["GET"])
 def internal_run_notifications():
     if CRON_SECRET:
@@ -202,7 +218,7 @@ def internal_run_notifications():
         return jsonify({"error": "unauthorized"}), 401
 
     try:
-        results = run_due_notifications()
+        result = run_due_notifications()
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "results": results})
+    return jsonify(result)
