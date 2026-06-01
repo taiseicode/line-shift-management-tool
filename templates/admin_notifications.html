@@ -139,6 +139,7 @@
   </div>
 </div>
 
+{% if show_automatic_notification_ui %}
 <div class="row g-3 align-items-start">
   <div class="col-xl-7">
     <div class="page-card card mb-3">
@@ -331,6 +332,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <div class="page-card card">
   <div class="card-body">
@@ -410,12 +412,14 @@
   }
 
   function syncRuleScheduleControls() {
+    if (!ruleScheduleType || !ruleWeekdayWrap || !ruleMonthDayWrap) return;
     const value = ruleScheduleType.value;
     ruleWeekdayWrap.classList.toggle("d-none", value !== "weekly");
     ruleMonthDayWrap.classList.toggle("d-none", value !== "monthly");
   }
 
   function syncRuleTargetControls() {
+    if (!ruleTargetType || !ruleTargetDateModeWrap || !ruleUsersWrap) return;
     const value = ruleTargetType.value;
     ruleTargetDateModeWrap.classList.toggle("d-none", value !== "unsubmitted");
     ruleUsersWrap.classList.toggle("d-none", value !== "individual");
@@ -424,8 +428,8 @@
   targetType.addEventListener("change", syncTargetControls);
   targetDate.addEventListener("change", refreshRecipientCount);
   userIds.addEventListener("change", refreshRecipientCount);
-  ruleScheduleType.addEventListener("change", syncRuleScheduleControls);
-  ruleTargetType.addEventListener("change", syncRuleTargetControls);
+  if (ruleScheduleType) ruleScheduleType.addEventListener("change", syncRuleScheduleControls);
+  if (ruleTargetType) ruleTargetType.addEventListener("change", syncRuleTargetControls);
   document.addEventListener("DOMContentLoaded", function() {
     syncTargetControls();
     syncRuleScheduleControls();

@@ -32,6 +32,10 @@ def _notification_debug_tools_enabled():
     return DEBUG_MODE or FLASK_ENV == "development"
 
 
+def _automatic_notifications_enabled():
+    return _notification_debug_tools_enabled()
+
+
 def _notifications_context(status="", error=""):
     today = today_jst()
     start_d = parse_ymd(request.args.get("start")) or today
@@ -45,7 +49,8 @@ def _notifications_context(status="", error=""):
     ]
     edit_rule_id = (request.args.get("edit_rule_id") or "").strip()
     edit_rule = None
-    if edit_rule_id:
+    show_automatic_notification_ui = _automatic_notifications_enabled()
+    if show_automatic_notification_ui and edit_rule_id:
         try:
             edit_rule = get_notification_rule(int(edit_rule_id))
         except (TypeError, ValueError):
@@ -64,6 +69,7 @@ def _notifications_context(status="", error=""):
         "edit_rule": edit_rule,
         "run_result": session.pop("notification_run_result", None),
         "show_notification_debug_tools": _notification_debug_tools_enabled(),
+        "show_automatic_notification_ui": show_automatic_notification_ui,
         "status": status,
         "error": error,
     }
@@ -128,6 +134,8 @@ def admin_notifications_send():
 def admin_notifications_rules_save():
     if not session.get("logged_in"):
         return redirect("/login")
+    if not _automatic_notifications_enabled():
+        return _redirect_with_message(error="自動通知ルール管理は現在停止中です。")
     csrf_error = validate_csrf_or_400()
     if csrf_error:
         return csrf_error
@@ -159,6 +167,8 @@ def admin_notifications_rules_save():
 def admin_notifications_rules_toggle():
     if not session.get("logged_in"):
         return redirect("/login")
+    if not _automatic_notifications_enabled():
+        return _redirect_with_message(error="自動通知ルール管理は現在停止中です。")
     csrf_error = validate_csrf_or_400()
     if csrf_error:
         return csrf_error
@@ -175,6 +185,8 @@ def admin_notifications_rules_toggle():
 def admin_notifications_rules_delete():
     if not session.get("logged_in"):
         return redirect("/login")
+    if not _automatic_notifications_enabled():
+        return _redirect_with_message(error="自動通知ルール管理は現在停止中です。")
     csrf_error = validate_csrf_or_400()
     if csrf_error:
         return csrf_error
@@ -203,6 +215,8 @@ def admin_notifications_preview_count():
 def admin_notifications_run_now():
     if not session.get("logged_in"):
         return redirect("/login")
+    if not _automatic_notifications_enabled():
+        return _redirect_with_message(error="自動通知の手動実行は現在停止中です。")
     csrf_error = validate_csrf_or_400()
     if csrf_error:
         return csrf_error
@@ -221,6 +235,13 @@ def internal_run_notifications():
             return jsonify({"error": "forbidden"}), 403
     elif not session.get("logged_in"):
         return jsonify({"error": "unauthorized"}), 401
+
+    if not _automatic_notifications_enabled():
+        return jsonify({
+            "ok": True,
+            "disabled": True,
+            "message": "automatic notifications are disabled",
+        })
 
     try:
         result = run_due_notifications()
