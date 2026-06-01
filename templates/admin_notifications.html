@@ -3,6 +3,7 @@
 {% block title %}通知管理{% endblock %}
 
 {% block content %}
+{% set rule = edit_rule or {} %}
 <div class="page-hero">
   <div class="card-body">
     <h1 class="mb-1">通知管理</h1>
@@ -17,83 +18,210 @@
 <div class="alert alert-danger py-2">{{ error }}</div>
 {% endif %}
 
-<div class="row g-3">
+<div class="page-card card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <h2 class="h5 mb-1">手動メッセージ送信</h2>
+        <div class="muted-note">line_user_id が登録されているユーザーだけに送信します。</div>
+      </div>
+      <span class="badge text-bg-secondary" id="recipientCountBadge">対象 0 件</span>
+    </div>
+
+    <form method="POST" action="/admin/notifications/send" id="notificationSendForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <div class="mb-3">
+        <label class="form-label" for="title">タイトル</label>
+        <input class="form-control" id="title" name="title" maxlength="120" placeholder="例: シフト提出のお願い">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="message">本文</label>
+        <textarea class="form-control" id="message" name="message" rows="5" required placeholder="送信する本文を入力"></textarea>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="targetType">対象者</label>
+          <select class="form-select" id="targetType" name="target_type">
+            <option value="all">全員</option>
+            <option value="unsubmitted">未提出者</option>
+            <option value="assigned">出勤予定者</option>
+            <option value="individual">個別ユーザー</option>
+          </select>
+        </div>
+        <div class="col-md-6" id="targetDateWrap">
+          <label class="form-label" for="targetDate">対象日</label>
+          <input class="form-control" id="targetDate" name="target_date" type="date" value="{{ target_date_value }}">
+        </div>
+      </div>
+      <div class="mt-3 d-none" id="individualUsersWrap">
+        <label class="form-label" for="userIds">個別ユーザー</label>
+        <select class="form-select" id="userIds" name="user_ids" multiple size="8">
+          {% for user in users %}
+          <option value="{{ user['id'] }}">{{ user['name'] or ('ID ' ~ user['id']) }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Ctrl または Shift キーで複数選択できます。</div>
+      </div>
+      <div class="d-flex justify-content-end mt-3">
+        <button type="submit" class="btn btn-primary">送信</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 align-items-start">
   <div class="col-xl-7">
     <div class="page-card card mb-3">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
           <div>
-            <h2 class="h5 mb-1">手動メッセージ送信</h2>
-            <div class="muted-note">line_user_id が登録されているユーザーだけに送信します。</div>
+            <h2 class="h5 mb-1">自動通知ルール</h2>
+            <div class="muted-note">毎日・毎週・毎月の通知ルールを管理します。</div>
           </div>
-          <span class="badge text-bg-secondary" id="recipientCountBadge">対象 0 件</span>
+          <a href="/admin/notifications#ruleForm" class="btn btn-outline-primary btn-sm">ルール追加</a>
         </div>
-
-        <form method="POST" action="/admin/notifications/send" id="notificationSendForm">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
-          <div class="mb-3">
-            <label class="form-label" for="title">タイトル</label>
-            <input class="form-control" id="title" name="title" maxlength="120" placeholder="例: シフト提出のお願い">
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="message">本文</label>
-            <textarea class="form-control" id="message" name="message" rows="6" required placeholder="送信する本文を入力"></textarea>
-          </div>
-          <div class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label" for="targetType">対象者</label>
-              <select class="form-select" id="targetType" name="target_type">
-                <option value="all">全員</option>
-                <option value="unsubmitted">未提出者</option>
-                <option value="assigned">出勤予定者</option>
-                <option value="individual">個別ユーザー</option>
-              </select>
-            </div>
-            <div class="col-md-6" id="targetDateWrap">
-              <label class="form-label" for="targetDate">対象日</label>
-              <input class="form-control" id="targetDate" name="target_date" type="date" value="{{ target_date_value }}">
-            </div>
-          </div>
-          <div class="mt-3 d-none" id="individualUsersWrap">
-            <label class="form-label" for="userIds">個別ユーザー</label>
-            <select class="form-select" id="userIds" name="user_ids" multiple size="8">
-              {% for user in users %}
-              <option value="{{ user['id'] }}">{{ user['name'] or ('ID ' ~ user['id']) }}</option>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle">
+            <thead>
+              <tr>
+                <th>ON/OFF</th>
+                <th>通知名</th>
+                <th>通知タイプ</th>
+                <th>送信タイミング</th>
+                <th>対象者</th>
+                <th>編集</th>
+                <th>削除</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in rules %}
+              <tr>
+                <td>
+                  <form method="POST" action="/admin/notifications/rules/toggle" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                    <input type="hidden" name="rule_id" value="{{ item['id'] }}">
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" type="checkbox" name="enabled" value="1" {% if item['enabled'] %}checked{% endif %} onchange="this.form.submit()">
+                    </div>
+                  </form>
+                </td>
+                <td class="fw-semibold">{{ item['name'] }}</td>
+                <td>{{ item['schedule_label'] }}</td>
+                <td>{{ item['timing_label'] }}</td>
+                <td>{{ item['target_label'] }}</td>
+                <td><a class="btn btn-sm btn-outline-secondary" href="/admin/notifications?edit_rule_id={{ item['id'] }}#ruleForm">編集</a></td>
+                <td>
+                  <form method="POST" action="/admin/notifications/rules/delete" onsubmit="return confirm('この通知ルールを削除しますか？');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+                    <input type="hidden" name="rule_id" value="{{ item['id'] }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">削除</button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" class="text-center text-muted py-4">自動通知ルールはまだありません。</td>
+              </tr>
               {% endfor %}
-            </select>
-            <div class="form-text">Ctrl または Shift キーで複数選択できます。</div>
-          </div>
-          <div class="d-flex justify-content-end mt-3">
-            <button type="submit" class="btn btn-primary">送信</button>
-          </div>
-        </form>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="col-xl-5">
-    <div class="page-card card mb-3">
+    <div class="page-card card mb-3" id="ruleForm">
       <div class="card-body">
-        <h2 class="h5 mb-3">自動通知設定</h2>
-        <form method="POST" action="/admin/notifications/settings">
+        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+          <h2 class="h5 mb-0">{{ 'ルール編集' if edit_rule else 'ルール追加' }}</h2>
+          {% if edit_rule %}
+          <a href="/admin/notifications#ruleForm" class="btn btn-sm btn-outline-secondary">新規作成へ</a>
+          {% endif %}
+        </div>
+
+        <form method="POST" action="/admin/notifications/rules/save">
           <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
-          <div class="border rounded-3 p-3 mb-3">
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="deadlineEnabled" name="deadline_enabled" value="1" {% if settings.deadline_enabled %}checked{% endif %}>
-              <label class="form-check-label fw-semibold" for="deadlineEnabled">提出期限前日リマインド</label>
-            </div>
-            <label class="form-label" for="deadlineTime">送信判定時刻</label>
-            <input class="form-control" id="deadlineTime" name="deadline_time" type="time" value="{{ settings.deadline_time }}">
+          <input type="hidden" name="rule_id" value="{{ rule.get('id', '') }}">
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="ruleEnabled" name="enabled" value="1" {% if not edit_rule or rule.get('enabled') %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="ruleEnabled">有効</label>
           </div>
 
-          <div class="border rounded-3 p-3 mb-3">
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="confirmedEnabled" name="confirmed_enabled" value="1" {% if settings.confirmed_enabled %}checked{% endif %}>
-              <label class="form-check-label fw-semibold" for="confirmedEnabled">確定シフト前日リマインド</label>
-            </div>
-            <label class="form-label" for="confirmedTime">送信判定時刻</label>
-            <input class="form-control" id="confirmedTime" name="confirmed_time" type="time" value="{{ settings.confirmed_time }}">
+          <div class="mb-3">
+            <label class="form-label" for="ruleName">通知名</label>
+            <input class="form-control" id="ruleName" name="name" maxlength="120" value="{{ rule.get('name', '') }}" placeholder="例: 来週シフト提出リマインド" required>
           </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="ruleScheduleType">通知タイプ</label>
+              <select class="form-select" id="ruleScheduleType" name="schedule_type">
+                <option value="daily" {% if rule.get('schedule_type', 'daily') == 'daily' %}selected{% endif %}>毎日</option>
+                <option value="weekly" {% if rule.get('schedule_type') == 'weekly' %}selected{% endif %}>毎週</option>
+                <option value="monthly" {% if rule.get('schedule_type') == 'monthly' %}selected{% endif %}>毎月</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="ruleSendTime">送信時刻</label>
+              <input class="form-control" id="ruleSendTime" name="send_time" type="time" value="{{ rule.get('send_time', '18:00') }}" required>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-0">
+            <div class="col-md-6 d-none" id="ruleWeekdayWrap">
+              <label class="form-label" for="ruleWeekday">曜日</label>
+              <select class="form-select" id="ruleWeekday" name="weekday">
+                {% for label in ['月', '火', '水', '木', '金', '土', '日'] %}
+                <option value="{{ loop.index0 }}" {% if rule.get('weekday') == loop.index0 %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 d-none" id="ruleMonthDayWrap">
+              <label class="form-label" for="ruleMonthDay">日付</label>
+              <input class="form-control" id="ruleMonthDay" name="month_day" type="number" min="1" max="31" value="{{ rule.get('month_day') or 15 }}">
+            </div>
+          </div>
+
+          <div class="mb-3 mt-3">
+            <label class="form-label" for="ruleTargetType">対象者</label>
+            <select class="form-select" id="ruleTargetType" name="rule_target_type">
+              <option value="all" {% if rule.get('target_type', 'all') == 'all' %}selected{% endif %}>全員</option>
+              <option value="unsubmitted" {% if rule.get('target_type') == 'unsubmitted' %}selected{% endif %}>未提出者</option>
+              <option value="tomorrow_assigned" {% if rule.get('target_type') == 'tomorrow_assigned' %}selected{% endif %}>明日出勤予定者</option>
+              <option value="individual" {% if rule.get('target_type') == 'individual' %}selected{% endif %}>個別ユーザー</option>
+            </select>
+          </div>
+
+          <div class="mb-3 d-none" id="ruleTargetDateModeWrap">
+            <label class="form-label" for="ruleTargetDateMode">対象日の基準</label>
+            <select class="form-select" id="ruleTargetDateMode" name="target_date_mode">
+              <option value="deadline_tomorrow" {% if rule.get('target_date_mode', 'deadline_tomorrow') == 'deadline_tomorrow' %}selected{% endif %}>提出期限が明日のシフト</option>
+              <option value="today" {% if rule.get('target_date_mode') == 'today' %}selected{% endif %}>今日</option>
+              <option value="tomorrow" {% if rule.get('target_date_mode') == 'tomorrow' %}selected{% endif %}>明日</option>
+            </select>
+          </div>
+
+          <div class="mb-3 d-none" id="ruleUsersWrap">
+            <label class="form-label" for="ruleUserIds">個別ユーザー</label>
+            <select class="form-select" id="ruleUserIds" name="rule_user_ids" multiple size="7">
+              {% for user in users %}
+              <option value="{{ user['id'] }}" {% if user['id'] in rule.get('user_id_values', []) %}selected{% endif %}>{{ user['name'] or ('ID ' ~ user['id']) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="ruleTitle">メッセージタイトル</label>
+            <input class="form-control" id="ruleTitle" name="rule_title" maxlength="120" value="{{ rule.get('title', '') }}" placeholder="例: シフト提出のお願い">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="ruleMessage">メッセージ本文</label>
+            <textarea class="form-control" id="ruleMessage" name="rule_message" rows="5" required placeholder="LINE通知本文として利用します。">{{ rule.get('message', '') }}</textarea>
+          </div>
+
           <div class="d-flex justify-content-end">
             <button type="submit" class="btn btn-primary">保存</button>
           </div>
@@ -123,7 +251,7 @@
           <tr>
             <td>{{ log['created_at_display'] }}</td>
             <td>{{ log['title'] or '（無題）' }}</td>
-            <td>{{ log['target_type'] }}</td>
+            <td>{{ log['target_type_display'] }}</td>
             <td>{{ log['target_date'] or '' }}</td>
             <td><span class="badge text-bg-success">{{ log['sent_count'] }}</span></td>
             <td><span class="badge {% if log['failed_count'] %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ log['failed_count'] }}</span></td>
@@ -148,9 +276,15 @@
   const usersWrap = document.getElementById("individualUsersWrap");
   const userIds = document.getElementById("userIds");
   const countBadge = document.getElementById("recipientCountBadge");
+  const ruleScheduleType = document.getElementById("ruleScheduleType");
+  const ruleWeekdayWrap = document.getElementById("ruleWeekdayWrap");
+  const ruleMonthDayWrap = document.getElementById("ruleMonthDayWrap");
+  const ruleTargetType = document.getElementById("ruleTargetType");
+  const ruleTargetDateModeWrap = document.getElementById("ruleTargetDateModeWrap");
+  const ruleUsersWrap = document.getElementById("ruleUsersWrap");
 
-  function selectedUserIds() {
-    return Array.from(userIds.selectedOptions || []).map((option) => option.value);
+  function selectedUserIds(selectEl) {
+    return Array.from(selectEl.selectedOptions || []).map((option) => option.value);
   }
 
   function syncTargetControls() {
@@ -164,7 +298,7 @@
     const params = new URLSearchParams();
     params.set("target_type", targetType.value);
     if (targetDate.value) params.set("target_date", targetDate.value);
-    selectedUserIds().forEach((id) => params.append("user_ids", id));
+    selectedUserIds(userIds).forEach((id) => params.append("user_ids", id));
     try {
       const response = await fetch(`/admin/notifications/preview-count?${params.toString()}`);
       const data = await response.json();
@@ -174,9 +308,27 @@
     }
   }
 
+  function syncRuleScheduleControls() {
+    const value = ruleScheduleType.value;
+    ruleWeekdayWrap.classList.toggle("d-none", value !== "weekly");
+    ruleMonthDayWrap.classList.toggle("d-none", value !== "monthly");
+  }
+
+  function syncRuleTargetControls() {
+    const value = ruleTargetType.value;
+    ruleTargetDateModeWrap.classList.toggle("d-none", value !== "unsubmitted");
+    ruleUsersWrap.classList.toggle("d-none", value !== "individual");
+  }
+
   targetType.addEventListener("change", syncTargetControls);
   targetDate.addEventListener("change", refreshRecipientCount);
   userIds.addEventListener("change", refreshRecipientCount);
-  document.addEventListener("DOMContentLoaded", syncTargetControls);
+  ruleScheduleType.addEventListener("change", syncRuleScheduleControls);
+  ruleTargetType.addEventListener("change", syncRuleTargetControls);
+  document.addEventListener("DOMContentLoaded", function() {
+    syncTargetControls();
+    syncRuleScheduleControls();
+    syncRuleTargetControls();
+  });
 </script>
 {% endblock %}

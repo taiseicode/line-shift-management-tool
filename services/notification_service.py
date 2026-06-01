@@ -1,7 +1,8 @@
+import json
 from datetime import datetime, timedelta
 
 from db import get_conn, using_postgres
-from repositories.settings_repository import get_settings, upsert_setting
+from repositories.settings_repository import get_setting, get_settings, upsert_setting
 from services.deadline_service import get_active_deadline_config, get_submission_deadline_status
 from services.line_notify_service import send_line_message
 from utils import is_valid_time_hhmm, now_jst, parse_ymd, to_ymd, today_jst
@@ -11,6 +12,7 @@ NOTIFY_DEADLINE_ENABLED_KEY = "notify_deadline_reminder_enabled"
 NOTIFY_DEADLINE_TIME_KEY = "notify_deadline_reminder_time"
 NOTIFY_CONFIRMED_ENABLED_KEY = "notify_confirmed_shift_reminder_enabled"
 NOTIFY_CONFIRMED_TIME_KEY = "notify_confirmed_shift_reminder_time"
+LEGACY_RULES_MIGRATED_KEY = "notification_rules_legacy_migrated"
 NOTIFICATION_SETTING_KEYS = (
     NOTIFY_DEADLINE_ENABLED_KEY,
     NOTIFY_DEADLINE_TIME_KEY,
@@ -18,12 +20,36 @@ NOTIFICATION_SETTING_KEYS = (
     NOTIFY_CONFIRMED_TIME_KEY,
 )
 
+SCHEDULE_DAILY = "daily"
+SCHEDULE_WEEKLY = "weekly"
+SCHEDULE_MONTHLY = "monthly"
+SCHEDULE_TYPES = {SCHEDULE_DAILY, SCHEDULE_WEEKLY, SCHEDULE_MONTHLY}
+
 TARGET_ALL = "all"
 TARGET_UNSUBMITTED = "unsubmitted"
 TARGET_ASSIGNED = "assigned"
+TARGET_TOMORROW_ASSIGNED = "tomorrow_assigned"
 TARGET_INDIVIDUAL = "individual"
-TARGET_AUTO_DEADLINE = "auto_deadline_reminder"
-TARGET_AUTO_CONFIRMED = "auto_confirmed_shift_reminder"
+RULE_TARGET_TYPES = {TARGET_ALL, TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED, TARGET_INDIVIDUAL}
+
+TARGET_DATE_TODAY = "today"
+TARGET_DATE_TOMORROW = "tomorrow"
+TARGET_DATE_DEADLINE_TOMORROW = "deadline_tomorrow"
+TARGET_DATE_MODES = {TARGET_DATE_TODAY, TARGET_DATE_TOMORROW, TARGET_DATE_DEADLINE_TOMORROW}
+
+WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
+TARGET_LABELS = {
+    TARGET_ALL: "全員",
+    TARGET_UNSUBMITTED: "未提出者",
+    TARGET_ASSIGNED: "出勤予定者",
+    TARGET_TOMORROW_ASSIGNED: "明日出勤予定者",
+    TARGET_INDIVIDUAL: "個別ユーザー",
+}
+SCHEDULE_LABELS = {
+    SCHEDULE_DAILY: "毎日",
+    SCHEDULE_WEEKLY: "毎週",
+    SCHEDULE_MONTHLY: "毎月",
+}
 
 
 def _is_enabled(value) -> bool:
@@ -36,6 +62,71 @@ def _row_to_recipient(row):
         "name": row["name"] or "",
         "line_user_id": row["line_user_id"] or "",
     }
+
+
+def _row_to_dict(row):
+    return dict(row)
+
+
+def _loads_user_ids(value):
+    if not value:
+        return []
+    try:
+        raw_values = json.loads(value)
+    except Exception:
+        raw_values = str(value).split(",")
+    user_ids = []
+    for raw_value in raw_values:
+        try:
+            user_ids.append(int(raw_value))
+        except (TypeError, ValueError):
+            pass
+    return user_ids
+
+
+def _dumps_user_ids(user_ids):
+    normalized = []
+    seen = set()
+    for raw_value in user_ids or []:
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if value not in seen:
+            normalized.append(value)
+            seen.add(value)
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def _format_rule(row):
+    item = _row_to_dict(row)
+    item["id"] = int(item["id"])
+    item["enabled"] = int(item.get("enabled") or 0)
+    item["weekday"] = None if item.get("weekday") is None else int(item["weekday"])
+    item["month_day"] = None if item.get("month_day") is None else int(item["month_day"])
+    item["user_id_values"] = _loads_user_ids(item.get("user_ids"))
+    item["schedule_label"] = SCHEDULE_LABELS.get(item.get("schedule_type"), item.get("schedule_type") or "")
+    item["target_label"] = TARGET_LABELS.get(item.get("target_type"), item.get("target_type") or "")
+    item["timing_label"] = format_rule_timing(item)
+    return item
+
+
+def format_rule_timing(rule):
+    schedule_type = rule.get("schedule_type")
+    send_time = rule.get("send_time") or ""
+    if schedule_type == SCHEDULE_DAILY:
+        return send_time
+    if schedule_type == SCHEDULE_WEEKLY:
+        weekday = rule.get("weekday")
+        try:
+            weekday_label = WEEKDAY_LABELS[int(weekday)]
+        except (TypeError, ValueError, IndexError):
+            weekday_label = "-"
+        return f"{weekday_label} {send_time}"
+    if schedule_type == SCHEDULE_MONTHLY:
+        month_day = rule.get("month_day")
+        return f"{month_day or '-'}日 {send_time}"
+    return send_time
 
 
 def get_notification_settings():
@@ -62,6 +153,8 @@ def save_notification_settings(deadline_enabled: bool, deadline_time: str, confi
 def get_recipients(target_type: str, target_date: str = "", user_ids=None):
     target_type = (target_type or "").strip()
     target_date = (target_date or "").strip()
+    if target_type == TARGET_TOMORROW_ASSIGNED:
+        target_type = TARGET_ASSIGNED
     conn = get_conn()
     try:
         c = conn.cursor()
@@ -124,22 +217,35 @@ def get_recipients(target_type: str, target_date: str = "", user_ids=None):
         conn.close()
 
 
-def _insert_notification_log(c, title, message, target_type, target_date):
+def _insert_notification_log(c, title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
     if using_postgres():
         row = c.execute("""
-            INSERT INTO notification_logs(title, message, target_type, target_date, sent_count, failed_count)
-            VALUES(?, ?, ?, ?, 0, 0)
+            INSERT INTO notification_logs(
+                title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key
+            )
+            VALUES(?, ?, ?, ?, 0, 0, ?, ?)
             RETURNING id
-        """, (title, message, target_type, target_date or None)).fetchone()
+        """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key)).fetchone()
         return int(row["id"])
     c.execute("""
-        INSERT INTO notification_logs(title, message, target_type, target_date, sent_count, failed_count)
-        VALUES(?, ?, ?, ?, 0, 0)
-    """, (title, message, target_type, target_date or None))
+        INSERT INTO notification_logs(
+            title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key
+        )
+        VALUES(?, ?, ?, ?, 0, 0, ?, ?)
+    """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key))
     return int(c.lastrowid)
 
 
-def send_notification(title: str, message: str, target_type: str, target_date: str = "", user_ids=None, recipient_target_type: str = None):
+def send_notification(
+    title: str,
+    message: str,
+    target_type: str,
+    target_date: str = "",
+    user_ids=None,
+    recipient_target_type: str = None,
+    notification_rule_id=None,
+    rule_run_key: str = None,
+):
     recipients = get_recipients(recipient_target_type or target_type, target_date, user_ids)
     conn = get_conn()
     sent_count = 0
@@ -147,7 +253,15 @@ def send_notification(title: str, message: str, target_type: str, target_date: s
     errors = []
     try:
         c = conn.cursor()
-        log_id = _insert_notification_log(c, title, message, target_type, target_date)
+        log_id = _insert_notification_log(
+            c,
+            title,
+            message,
+            target_type,
+            target_date,
+            notification_rule_id=notification_rule_id,
+            rule_run_key=rule_run_key,
+        )
         for recipient in recipients:
             ok, error = send_line_message(recipient["line_user_id"], message)
             status = "sent" if ok else "failed"
@@ -188,12 +302,284 @@ def send_notification(title: str, message: str, target_type: str, target_date: s
         conn.close()
 
 
+def _legacy_rule_exists(c, name):
+    row = c.execute("SELECT id FROM notification_rules WHERE name = ? LIMIT 1", (name,)).fetchone()
+    return row is not None
+
+
+def ensure_legacy_notification_rules_migrated():
+    if get_setting(LEGACY_RULES_MIGRATED_KEY) == "1":
+        return
+    values = get_settings(NOTIFICATION_SETTING_KEYS)
+    has_legacy_value = any(values.get(key) is not None for key in NOTIFICATION_SETTING_KEYS)
+    if not has_legacy_value:
+        upsert_setting(LEGACY_RULES_MIGRATED_KEY, "1")
+        return
+
+    now_text = now_jst().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        if (
+            values.get(NOTIFY_DEADLINE_ENABLED_KEY) is not None or
+            values.get(NOTIFY_DEADLINE_TIME_KEY) is not None
+        ) and not _legacy_rule_exists(c, "シフト提出リマインド"):
+            c.execute("""
+                INSERT INTO notification_rules(
+                    name, enabled, schedule_type, send_time, target_type, target_date_mode,
+                    title, message, user_ids, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                "シフト提出リマインド",
+                1 if _is_enabled(values.get(NOTIFY_DEADLINE_ENABLED_KEY)) else 0,
+                SCHEDULE_DAILY,
+                values.get(NOTIFY_DEADLINE_TIME_KEY) or "09:00",
+                TARGET_UNSUBMITTED,
+                TARGET_DATE_DEADLINE_TOMORROW,
+                "シフト提出リマインド",
+                "【シフト提出リマインド】\nシフト提出期限が近づいています。\nまだ提出していない方は、シフト便から提出をお願いします。",
+                "[]",
+                now_text,
+                now_text,
+            ))
+        if (
+            values.get(NOTIFY_CONFIRMED_ENABLED_KEY) is not None or
+            values.get(NOTIFY_CONFIRMED_TIME_KEY) is not None
+        ) and not _legacy_rule_exists(c, "明日のシフト確認"):
+            c.execute("""
+                INSERT INTO notification_rules(
+                    name, enabled, schedule_type, send_time, target_type, target_date_mode,
+                    title, message, user_ids, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                "明日のシフト確認",
+                1 if _is_enabled(values.get(NOTIFY_CONFIRMED_ENABLED_KEY)) else 0,
+                SCHEDULE_DAILY,
+                values.get(NOTIFY_CONFIRMED_TIME_KEY) or "18:00",
+                TARGET_TOMORROW_ASSIGNED,
+                TARGET_DATE_TOMORROW,
+                "明日のシフト確認",
+                "【明日のシフト確認】\n明日は確定シフトがあります。\nシフト便で時間を確認してください。",
+                "[]",
+                now_text,
+                now_text,
+            ))
+        conn.commit()
+        upsert_setting(LEGACY_RULES_MIGRATED_KEY, "1")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_notification_rules():
+    ensure_legacy_notification_rules_migrated()
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        rows = c.execute("""
+            SELECT *
+            FROM notification_rules
+            ORDER BY enabled DESC, id DESC
+        """).fetchall()
+        return [_format_rule(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_notification_rule(rule_id: int):
+    ensure_legacy_notification_rules_migrated()
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        row = c.execute("SELECT * FROM notification_rules WHERE id = ?", (int(rule_id),)).fetchone()
+        return _format_rule(row) if row else None
+    finally:
+        conn.close()
+
+
+def _validate_rule_payload(data):
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise ValueError("通知名を入力してください")
+    schedule_type = (data.get("schedule_type") or "").strip()
+    if schedule_type not in SCHEDULE_TYPES:
+        raise ValueError("通知タイプが不正です")
+    send_time = (data.get("send_time") or "").strip()
+    if not is_valid_time_hhmm(send_time):
+        raise ValueError("送信時刻が不正です")
+
+    weekday = None
+    month_day = None
+    if schedule_type == SCHEDULE_WEEKLY:
+        try:
+            weekday = int(data.get("weekday"))
+        except (TypeError, ValueError):
+            raise ValueError("曜日を選択してください")
+        if weekday < 0 or weekday > 6:
+            raise ValueError("曜日を選択してください")
+    if schedule_type == SCHEDULE_MONTHLY:
+        try:
+            month_day = int(data.get("month_day"))
+        except (TypeError, ValueError):
+            raise ValueError("日付を入力してください")
+        if month_day < 1 or month_day > 31:
+            raise ValueError("日付は1から31で入力してください")
+
+    target_type = (data.get("target_type") or "").strip()
+    if target_type not in RULE_TARGET_TYPES:
+        raise ValueError("対象者が不正です")
+    target_date_mode = (data.get("target_date_mode") or "").strip()
+    if target_date_mode not in TARGET_DATE_MODES:
+        target_date_mode = TARGET_DATE_TOMORROW if target_type == TARGET_TOMORROW_ASSIGNED else TARGET_DATE_DEADLINE_TOMORROW
+    title = (data.get("title") or "").strip()
+    message = (data.get("message") or "").strip()
+    if not message:
+        raise ValueError("メッセージ本文を入力してください")
+    user_ids = data.get("user_ids") or []
+    if target_type == TARGET_INDIVIDUAL and not _loads_user_ids(_dumps_user_ids(user_ids)):
+        raise ValueError("個別ユーザーを選択してください")
+
+    return {
+        "name": name,
+        "enabled": 1 if data.get("enabled") else 0,
+        "schedule_type": schedule_type,
+        "weekday": weekday,
+        "month_day": month_day,
+        "send_time": send_time,
+        "target_type": target_type,
+        "target_date_mode": target_date_mode,
+        "title": title,
+        "message": message,
+        "user_ids": _dumps_user_ids(user_ids),
+    }
+
+
+def save_notification_rule(data, rule_id=None):
+    ensure_legacy_notification_rules_migrated()
+    values = _validate_rule_payload(data)
+    now_text = now_jst().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        if rule_id:
+            c.execute("""
+                UPDATE notification_rules
+                SET name = ?, enabled = ?, schedule_type = ?, weekday = ?, month_day = ?, send_time = ?,
+                    target_type = ?, target_date_mode = ?, title = ?, message = ?, user_ids = ?, updated_at = ?
+                WHERE id = ?
+            """, (
+                values["name"],
+                values["enabled"],
+                values["schedule_type"],
+                values["weekday"],
+                values["month_day"],
+                values["send_time"],
+                values["target_type"],
+                values["target_date_mode"],
+                values["title"],
+                values["message"],
+                values["user_ids"],
+                now_text,
+                int(rule_id),
+            ))
+            if c.rowcount == 0:
+                raise ValueError("通知ルールが見つかりません")
+            saved_id = int(rule_id)
+        elif using_postgres():
+            row = c.execute("""
+                INSERT INTO notification_rules(
+                    name, enabled, schedule_type, weekday, month_day, send_time, target_type,
+                    target_date_mode, title, message, user_ids, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                RETURNING id
+            """, (
+                values["name"],
+                values["enabled"],
+                values["schedule_type"],
+                values["weekday"],
+                values["month_day"],
+                values["send_time"],
+                values["target_type"],
+                values["target_date_mode"],
+                values["title"],
+                values["message"],
+                values["user_ids"],
+                now_text,
+                now_text,
+            )).fetchone()
+            saved_id = int(row["id"])
+        else:
+            c.execute("""
+                INSERT INTO notification_rules(
+                    name, enabled, schedule_type, weekday, month_day, send_time, target_type,
+                    target_date_mode, title, message, user_ids, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                values["name"],
+                values["enabled"],
+                values["schedule_type"],
+                values["weekday"],
+                values["month_day"],
+                values["send_time"],
+                values["target_type"],
+                values["target_date_mode"],
+                values["title"],
+                values["message"],
+                values["user_ids"],
+                now_text,
+                now_text,
+            ))
+            saved_id = int(c.lastrowid)
+        conn.commit()
+        return saved_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def set_notification_rule_enabled(rule_id: int, enabled: bool):
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE notification_rules
+            SET enabled = ?, updated_at = ?
+            WHERE id = ?
+        """, (1 if enabled else 0, now_jst().strftime("%Y-%m-%d %H:%M:%S"), int(rule_id)))
+        updated = c.rowcount
+        conn.commit()
+        return updated
+    finally:
+        conn.close()
+
+
+def delete_notification_rule(rule_id: int):
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM notification_rules WHERE id = ?", (int(rule_id),))
+        deleted = c.rowcount
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
 def get_notification_logs(limit: int = 20):
     conn = get_conn()
     try:
         c = conn.cursor()
         rows = c.execute("""
-            SELECT id, title, message, target_type, target_date, sent_count, failed_count, error_text, created_at
+            SELECT id, title, message, target_type, target_date, sent_count, failed_count, error_text,
+                   notification_rule_id, rule_run_key, created_at
             FROM notification_logs
             ORDER BY id DESC
             LIMIT ?
@@ -205,6 +591,10 @@ def get_notification_logs(limit: int = 20):
 
 def _format_notification_log(row):
     item = dict(row)
+    if item.get("notification_rule_id"):
+        item["target_type_display"] = "自動ルール"
+    else:
+        item["target_type_display"] = TARGET_LABELS.get(item.get("target_type"), item.get("target_type") or "")
     created_at = item.get("created_at")
     if isinstance(created_at, datetime):
         item["created_at_display"] = created_at.strftime("%Y-%m-%d %H:%M")
@@ -219,23 +609,6 @@ def _format_notification_log(row):
             pass
     item["created_at_display"] = text[:16] if len(text) >= 16 else text
     return item
-
-
-def has_auto_notification_sent(target_type: str, target_date: str, run_date: str):
-    conn = get_conn()
-    try:
-        c = conn.cursor()
-        row = c.execute("""
-            SELECT id
-            FROM notification_logs
-            WHERE target_type = ?
-              AND COALESCE(target_date, '') = ?
-              AND substr(CAST(created_at AS TEXT), 1, 10) = ?
-            LIMIT 1
-        """, (target_type, target_date or "", run_date)).fetchone()
-        return row is not None
-    finally:
-        conn.close()
 
 
 def _time_has_passed(setting_time: str, current) -> bool:
@@ -256,37 +629,123 @@ def _find_shift_date_with_deadline_on(deadline_date):
     return None
 
 
+def _rule_matches_now(rule, current):
+    if int(rule.get("enabled") or 0) != 1:
+        return False
+    if not _time_has_passed(rule.get("send_time") or "", current):
+        return False
+    schedule_type = rule.get("schedule_type")
+    if schedule_type == SCHEDULE_DAILY:
+        return True
+    if schedule_type == SCHEDULE_WEEKLY:
+        return rule.get("weekday") is not None and int(rule["weekday"]) == current.weekday()
+    if schedule_type == SCHEDULE_MONTHLY:
+        return rule.get("month_day") is not None and int(rule["month_day"]) == current.day
+    return False
+
+
+def _rule_run_key(rule, current):
+    return f"{int(rule['id'])}:{rule['schedule_type']}:{current.strftime('%Y-%m-%d')}:{rule['send_time']}"
+
+
+def _has_rule_run_sent(rule_id: int, run_key: str):
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        row = c.execute("""
+            SELECT id
+            FROM notification_logs
+            WHERE notification_rule_id = ?
+              AND rule_run_key = ?
+            LIMIT 1
+        """, (int(rule_id), run_key)).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def _update_rule_last_sent(rule_id: int, sent_at):
+    conn = get_conn()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE notification_rules
+            SET last_sent_at = ?, updated_at = ?
+            WHERE id = ?
+        """, (
+            sent_at.strftime("%Y-%m-%d %H:%M:%S"),
+            now_jst().strftime("%Y-%m-%d %H:%M:%S"),
+            int(rule_id),
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _resolve_rule_target(rule, current):
+    target_type = rule.get("target_type")
+    mode = rule.get("target_date_mode") or TARGET_DATE_TODAY
+    if target_type == TARGET_ALL:
+        return "", TARGET_ALL, []
+    if target_type == TARGET_INDIVIDUAL:
+        return "", TARGET_INDIVIDUAL, rule.get("user_id_values") or []
+    if target_type == TARGET_TOMORROW_ASSIGNED:
+        return to_ymd(current.date() + timedelta(days=1)), TARGET_ASSIGNED, []
+    if target_type == TARGET_UNSUBMITTED:
+        if mode == TARGET_DATE_TODAY:
+            return to_ymd(current.date()), TARGET_UNSUBMITTED, []
+        if mode == TARGET_DATE_TOMORROW:
+            return to_ymd(current.date() + timedelta(days=1)), TARGET_UNSUBMITTED, []
+        shift_date = _find_shift_date_with_deadline_on(current.date() + timedelta(days=1))
+        return (to_ymd(shift_date) if shift_date else ""), TARGET_UNSUBMITTED, []
+    return "", target_type, []
+
+
 def run_due_notifications(current=None):
     current = current or now_jst()
-    run_date = to_ymd(current.date())
-    tomorrow = current.date() + timedelta(days=1)
-    settings = get_notification_settings()
+    ensure_legacy_notification_rules_migrated()
     results = []
-
-    if settings["deadline_enabled"] and _time_has_passed(settings["deadline_time"], current):
-        shift_date = _find_shift_date_with_deadline_on(tomorrow)
-        if shift_date:
-            target_date = to_ymd(shift_date)
-            if not has_auto_notification_sent(TARGET_AUTO_DEADLINE, target_date, run_date):
-                results.append(send_notification(
-                    "シフト提出リマインド",
-                    "【シフト提出リマインド】\nシフト提出期限が近づいています。\nまだ提出していない方は、シフト便から提出をお願いします。",
-                    TARGET_AUTO_DEADLINE,
-                    target_date,
-                    recipient_target_type=TARGET_UNSUBMITTED,
-                ) | {"type": TARGET_AUTO_DEADLINE, "target_date": target_date})
-
-    if settings["confirmed_enabled"] and _time_has_passed(settings["confirmed_time"], current):
-        target_date = to_ymd(tomorrow)
-        if not has_auto_notification_sent(TARGET_AUTO_CONFIRMED, target_date, run_date):
-            recipients = get_recipients(TARGET_ASSIGNED, target_date)
-            if recipients:
-                results.append(send_notification(
-                    "明日のシフト確認",
-                    "【明日のシフト確認】\n明日は確定シフトがあります。\nシフト便で時間を確認してください。",
-                    TARGET_AUTO_CONFIRMED,
-                    target_date,
-                    recipient_target_type=TARGET_ASSIGNED,
-                ) | {"type": TARGET_AUTO_CONFIRMED, "target_date": target_date})
-
+    for rule in get_notification_rules():
+        if not _rule_matches_now(rule, current):
+            continue
+        run_key = _rule_run_key(rule, current)
+        if _has_rule_run_sent(rule["id"], run_key):
+            continue
+        target_date, recipient_target_type, user_ids = _resolve_rule_target(rule, current)
+        if rule["target_type"] in {TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED} and not target_date:
+            results.append({
+                "type": "rule",
+                "rule_id": rule["id"],
+                "name": rule["name"],
+                "skipped": "target_date_not_found",
+            })
+            continue
+        recipients = get_recipients(recipient_target_type, target_date, user_ids)
+        if not recipients:
+            results.append({
+                "type": "rule",
+                "rule_id": rule["id"],
+                "name": rule["name"],
+                "target_date": target_date,
+                "skipped": "no_recipients",
+            })
+            continue
+        result = send_notification(
+            rule.get("title") or rule["name"],
+            rule["message"],
+            f"rule:{rule['id']}",
+            target_date,
+            user_ids,
+            recipient_target_type=recipient_target_type,
+            notification_rule_id=rule["id"],
+            rule_run_key=run_key,
+        )
+        _update_rule_last_sent(rule["id"], current)
+        results.append({
+            **result,
+            "type": "rule",
+            "rule_id": rule["id"],
+            "name": rule["name"],
+            "target_date": target_date,
+        })
     return results
