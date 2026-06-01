@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 
 from flask import Blueprint, jsonify, make_response, redirect, render_template, request, session
 
-from config import CRON_SECRET
+from config import CRON_SECRET, DEBUG_MODE, FLASK_ENV
 from repositories.user_repository import get_all_users
 from services.auth_service import get_or_create_csrf_token, validate_csrf_or_400
 from services.notification_service import (
@@ -26,6 +26,10 @@ from utils import parse_ymd, to_ymd, today_jst
 
 
 notifications_bp = Blueprint("notifications", __name__)
+
+
+def _notification_debug_tools_enabled():
+    return DEBUG_MODE or FLASK_ENV == "development"
 
 
 def _notifications_context(status="", error=""):
@@ -59,6 +63,7 @@ def _notifications_context(status="", error=""):
         "rules": get_notification_rules(),
         "edit_rule": edit_rule,
         "run_result": session.pop("notification_run_result", None),
+        "show_notification_debug_tools": _notification_debug_tools_enabled(),
         "status": status,
         "error": error,
     }

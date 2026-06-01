@@ -17,6 +17,8 @@ LIFF_ID = os.getenv("LIFF_ID", "")
 LINE_LOGIN_CHANNEL_ID = (os.getenv("LINE_LOGIN_CHANNEL_ID", "") or os.getenv("LINE_CHANNEL_ID", "")).strip()
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "1").strip().lower() in ("1", "true", "yes", "on")
 CRON_SECRET = os.getenv("CRON_SECRET", "").strip()
+FLASK_ENV = os.getenv("FLASK_ENV", "").strip().lower()
+DEBUG_MODE = os.getenv("DEBUG_MODE", "0").strip().lower() in ("1", "true", "yes", "on")
 
 if not LINE_CHANNEL_SECRET or not LINE_CHANNEL_ACCESS_TOKEN:
     raise Exception("LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN must be set in environment")

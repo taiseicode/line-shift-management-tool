@@ -51,7 +51,7 @@ SCHEDULE_LABELS = {
     SCHEDULE_MONTHLY: "毎月",
 }
 TIMEZONE_NAME = "Asia/Tokyo"
-STATUS_CRON_NOT_RUN = "cron未実行"
+STATUS_CRON_NOT_RUN = "送信待ち"
 STATUS_SENT = "送信済み"
 STATUS_SKIPPED = "スキップ"
 STATUS_FAILED = "送信失敗"
@@ -147,6 +147,31 @@ def _next_rule_run_at(rule, current=None):
     return ""
 
 
+def _friendly_rule_status(item):
+    if int(item.get("enabled") or 0) != 1:
+        return "停止中"
+
+    status = item.get("last_run_status") or ""
+    reason = item.get("last_skip_reason") or ""
+    failed_count = int(item.get("last_failed_count") or 0)
+
+    if failed_count > 0 or status == STATUS_FAILED or reason in {"通知タイプが不正です"}:
+        return "エラー"
+    if reason == "対象ユーザーが0人のため送信しませんでした":
+        return "対象者なし"
+    if status == STATUS_SENT or reason == "本日は送信済みです":
+        return "送信済み"
+    if not item.get("last_checked_at"):
+        return "送信待ち"
+    if reason in {"送信時刻前です", "曜日が一致しません", "日付が一致しません"}:
+        return "送信待ち"
+    if reason in {"無効です"}:
+        return "正常"
+    if reason:
+        return "エラー"
+    return "正常"
+
+
 def _format_rule(row):
     item = _row_to_dict(row)
     item["id"] = int(item["id"])
@@ -162,6 +187,7 @@ def _format_rule(row):
     item["last_checked_display"] = _format_dt(item.get("last_checked_at"))
     item["last_status_display"] = item.get("last_run_status") or STATUS_CRON_NOT_RUN
     item["last_skip_reason_display"] = item.get("last_skip_reason") or ""
+    item["status_label"] = _friendly_rule_status(item)
     return item
 
 
