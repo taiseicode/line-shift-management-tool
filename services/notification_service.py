@@ -1,4 +1,5 @@
 import json
+from threading import Lock
 from datetime import datetime, timedelta
 
 from db import get_conn, using_postgres
@@ -55,6 +56,8 @@ STATUS_CRON_NOT_RUN = "送信待ち"
 STATUS_SENT = "送信済み"
 STATUS_SKIPPED = "スキップ"
 STATUS_FAILED = "送信失敗"
+
+_run_notifications_lock = Lock()
 
 
 def _is_enabled(value) -> bool:
@@ -314,20 +317,7 @@ def _insert_notification_log(c, title, message, target_type, target_date, notifi
     return int(c.lastrowid)
 
 
-def send_notification(
-    title: str,
-    message: str,
-    target_type: str,
-    target_date: str = "",
-    user_ids=None,
-    recipient_target_type: str = None,
-    notification_rule_id=None,
-    rule_run_key: str = None,
-):
-    recipients = get_recipients(recipient_target_type or target_type, target_date, user_ids)
-    sent_count = 0
-    failed_count = 0
-    errors = []
+def _create_notification_log(title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
     with get_conn() as conn:
         c = conn.cursor()
         try:
@@ -340,15 +330,18 @@ def send_notification(
                 notification_rule_id=notification_rule_id,
                 rule_run_key=rule_run_key,
             )
-            for recipient in recipients:
-                ok, error = send_line_message(recipient["line_user_id"], message)
-                status = "sent" if ok else "failed"
-                if ok:
-                    sent_count += 1
-                else:
-                    failed_count += 1
-                    if error:
-                        errors.append(f'{recipient["name"] or recipient["user_id"]}: {error}')
+            conn.commit()
+            return log_id
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text):
+    with get_conn() as conn:
+        c = conn.cursor()
+        try:
+            for recipient, result in zip(recipients, delivery_results):
                 c.execute("""
                     INSERT INTO notification_recipients(notification_log_id, user_id, line_user_id, status, error_text)
                     VALUES(?, ?, ?, ?, ?)
@@ -356,26 +349,81 @@ def send_notification(
                     log_id,
                     recipient["user_id"],
                     recipient["line_user_id"],
-                    status,
-                    error,
+                    result["status"],
+                    result["error"],
                 ))
-            error_text = "\n".join(errors) if errors else None
             c.execute("""
                 UPDATE notification_logs
                 SET sent_count = ?, failed_count = ?, error_text = ?
                 WHERE id = ?
             """, (sent_count, failed_count, error_text, log_id))
             conn.commit()
-            return {
-                "log_id": log_id,
-                "target_count": len(recipients),
-                "sent_count": sent_count,
-                "failed_count": failed_count,
-                "error_text": error_text,
-            }
         except Exception:
             conn.rollback()
             raise
+
+
+def send_notification(
+    title: str,
+    message: str,
+    target_type: str,
+    target_date: str = "",
+    user_ids=None,
+    recipient_target_type: str = None,
+    notification_rule_id=None,
+    rule_run_key: str = None,
+    recipients=None,
+):
+    if recipients is None:
+        recipients = get_recipients(recipient_target_type or target_type, target_date, user_ids)
+    log_id = _create_notification_log(
+        title,
+        message,
+        target_type,
+        target_date,
+        notification_rule_id=notification_rule_id,
+        rule_run_key=rule_run_key,
+    )
+
+    sent_count = 0
+    failed_count = 0
+    errors = []
+    delivery_results = []
+    for recipient in recipients:
+        ok, error = send_line_message(recipient["line_user_id"], message)
+        status = "sent" if ok else "failed"
+        if ok:
+            sent_count += 1
+        else:
+            failed_count += 1
+            if error:
+                errors.append(f'{recipient["name"] or recipient["user_id"]}: {error}')
+        delivery_results.append({"status": status, "error": error})
+
+    error_text = "\n".join(errors) if errors else None
+    _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text)
+    return {
+        "log_id": log_id,
+        "target_count": len(recipients),
+        "sent_count": sent_count,
+        "failed_count": failed_count,
+        "error_text": error_text,
+    }
+
+
+def _cron_already_running_result(current):
+    return {
+        "ok": True,
+        "now": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "timezone": TIMEZONE_NAME,
+        "checked_rules": 0,
+        "matched_rules": 0,
+        "sent_rules": 0,
+        "sent_notifications": 0,
+        "skipped_rules": 0,
+        "skipped_reason": "previous notification run is still running",
+        "results": [],
+    }
 
 
 def _legacy_rule_exists(c, name):
@@ -778,85 +826,92 @@ def _resolve_rule_target(rule, current):
 
 def run_due_notifications(current=None):
     current = _normalize_current(current)
-    ensure_legacy_notification_rules_migrated()
-    rules = get_notification_rules()
-    results = []
+    if not _run_notifications_lock.acquire(blocking=False):
+        return _cron_already_running_result(current)
 
-    for rule in rules:
-        matched, reason = _rule_match_status(rule, current)
-        base = {
-            "rule_id": rule["id"],
-            "name": rule["name"],
-            "matched": matched,
-            "target_count": 0,
-            "sent_count": 0,
-            "failed_count": 0,
-            "skipped_reason": reason,
+    try:
+        ensure_legacy_notification_rules_migrated()
+        rules = get_notification_rules()
+        results = []
+
+        for rule in rules:
+            matched, reason = _rule_match_status(rule, current)
+            base = {
+                "rule_id": rule["id"],
+                "name": rule["name"],
+                "matched": matched,
+                "target_count": 0,
+                "sent_count": 0,
+                "failed_count": 0,
+                "skipped_reason": reason,
+            }
+            if not matched:
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append(base)
+                continue
+
+            run_key = _rule_run_key(rule, current)
+            if _has_rule_run_sent(rule["id"], run_key):
+                reason = "本日は送信済みです"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append({**base, "skipped_reason": reason})
+                continue
+
+            target_date, recipient_target_type, user_ids = _resolve_rule_target(rule, current)
+            if rule["target_type"] in {TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED} and not target_date:
+                reason = "対象日が見つかりません"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append({**base, "target_date": target_date, "skipped_reason": reason})
+                continue
+
+            recipients = get_recipients(recipient_target_type, target_date, user_ids)
+            if not recipients:
+                reason = "対象ユーザーが0人のため送信しませんでした"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason, target_count=0)
+                results.append({**base, "target_date": target_date, "skipped_reason": reason})
+                continue
+
+            result = send_notification(
+                rule.get("title") or rule["name"],
+                rule["message"],
+                f"rule:{rule['id']}",
+                target_date,
+                user_ids,
+                recipient_target_type=recipient_target_type,
+                notification_rule_id=rule["id"],
+                rule_run_key=run_key,
+                recipients=recipients,
+            )
+            status = STATUS_SENT if int(result["failed_count"] or 0) == 0 else STATUS_FAILED
+            _update_rule_run_result(
+                rule["id"],
+                current,
+                status,
+                None,
+                target_count=result["target_count"],
+                sent_count=result["sent_count"],
+                failed_count=result["failed_count"],
+                mark_sent=True,
+            )
+            results.append({
+                **base,
+                **result,
+                "target_date": target_date,
+                "skipped_reason": None,
+            })
+
+        sent_rules = sum(1 for item in results if item["matched"] and item["skipped_reason"] is None)
+        skipped_rules = sum(1 for item in results if item["skipped_reason"])
+        return {
+            "ok": True,
+            "now": current.strftime("%Y-%m-%d %H:%M:%S"),
+            "timezone": TIMEZONE_NAME,
+            "checked_rules": len(rules),
+            "matched_rules": sum(1 for item in results if item["matched"]),
+            "sent_rules": sent_rules,
+            "sent_notifications": sum(int(item.get("sent_count") or 0) for item in results),
+            "skipped_rules": skipped_rules,
+            "results": results,
         }
-        if not matched:
-            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
-            results.append(base)
-            continue
-
-        run_key = _rule_run_key(rule, current)
-        if _has_rule_run_sent(rule["id"], run_key):
-            reason = "本日は送信済みです"
-            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
-            results.append({**base, "skipped_reason": reason})
-            continue
-
-        target_date, recipient_target_type, user_ids = _resolve_rule_target(rule, current)
-        if rule["target_type"] in {TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED} and not target_date:
-            reason = "対象日が見つかりません"
-            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
-            results.append({**base, "target_date": target_date, "skipped_reason": reason})
-            continue
-
-        recipients = get_recipients(recipient_target_type, target_date, user_ids)
-        if not recipients:
-            reason = "対象ユーザーが0人のため送信しませんでした"
-            _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason, target_count=0)
-            results.append({**base, "target_date": target_date, "skipped_reason": reason})
-            continue
-
-        result = send_notification(
-            rule.get("title") or rule["name"],
-            rule["message"],
-            f"rule:{rule['id']}",
-            target_date,
-            user_ids,
-            recipient_target_type=recipient_target_type,
-            notification_rule_id=rule["id"],
-            rule_run_key=run_key,
-        )
-        status = STATUS_SENT if int(result["failed_count"] or 0) == 0 else STATUS_FAILED
-        _update_rule_run_result(
-            rule["id"],
-            current,
-            status,
-            None,
-            target_count=result["target_count"],
-            sent_count=result["sent_count"],
-            failed_count=result["failed_count"],
-            mark_sent=True,
-        )
-        results.append({
-            **base,
-            **result,
-            "target_date": target_date,
-            "skipped_reason": None,
-        })
-
-    sent_rules = sum(1 for item in results if item["matched"] and item["skipped_reason"] is None)
-    skipped_rules = sum(1 for item in results if item["skipped_reason"])
-    return {
-        "ok": True,
-        "now": current.strftime("%Y-%m-%d %H:%M:%S"),
-        "timezone": TIMEZONE_NAME,
-        "checked_rules": len(rules),
-        "matched_rules": sum(1 for item in results if item["matched"]),
-        "sent_rules": sent_rules,
-        "sent_notifications": sum(int(item.get("sent_count") or 0) for item in results),
-        "skipped_rules": skipped_rules,
-        "results": results,
-    }
+    finally:
+        _run_notifications_lock.release()
