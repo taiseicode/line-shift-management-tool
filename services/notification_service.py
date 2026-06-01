@@ -57,6 +57,16 @@ STATUS_SENT = "送信済み"
 STATUS_SKIPPED = "スキップ"
 STATUS_FAILED = "送信失敗"
 
+LOG_STATUS_PENDING = "pending"
+LOG_STATUS_SENDING = "sending"
+LOG_STATUS_SENT = "sent"
+LOG_STATUS_FAILED = "failed"
+LOG_STATUS_PARTIAL_FAILED = "partial_failed"
+LOG_STATUS_FAILED_STALE = "failed_stale"
+LOG_DELIVERED_STATUSES = {LOG_STATUS_SENT, LOG_STATUS_PARTIAL_FAILED, LOG_STATUS_FAILED}
+LOG_ACTIVE_STATUSES = {LOG_STATUS_PENDING, LOG_STATUS_SENDING}
+LOG_STALE_AFTER_MINUTES = 30
+
 _run_notifications_lock = Lock()
 
 
@@ -297,24 +307,55 @@ def get_recipients(target_type: str, target_date: str = "", user_ids=None):
         return []
 
 
-def _insert_notification_log(c, title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
+def _insert_notification_log(c, title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None, status=LOG_STATUS_SENDING):
     created_at = now_jst().strftime("%Y-%m-%d %H:%M:%S")
     if using_postgres():
         row = c.execute("""
             INSERT INTO notification_logs(
-                title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key, created_at
+                title, message, target_type, target_date, sent_count, failed_count, status,
+                notification_rule_id, rule_run_key, created_at
             )
-            VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?)
+            VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+            ON CONFLICT(notification_rule_id, rule_run_key) DO NOTHING
             RETURNING id
-        """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key, created_at)).fetchone()
-        return int(row["id"])
+        """, (title, message, target_type, target_date or None, status, notification_rule_id, rule_run_key, created_at)).fetchone()
+        return int(row["id"]) if row else None
     c.execute("""
         INSERT INTO notification_logs(
-            title, message, target_type, target_date, sent_count, failed_count, notification_rule_id, rule_run_key, created_at
+            title, message, target_type, target_date, sent_count, failed_count, status,
+            notification_rule_id, rule_run_key, created_at
         )
-        VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?)
-    """, (title, message, target_type, target_date or None, notification_rule_id, rule_run_key, created_at))
-    return int(c.lastrowid)
+        VALUES(?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+        ON CONFLICT(notification_rule_id, rule_run_key) DO NOTHING
+    """, (title, message, target_type, target_date or None, status, notification_rule_id, rule_run_key, created_at))
+    return int(c.lastrowid) if c.rowcount else None
+
+
+def _get_notification_log_by_run_key(c, notification_rule_id, rule_run_key):
+    if notification_rule_id is None or not rule_run_key:
+        return None
+    return c.execute("""
+        SELECT id, status, created_at, sent_count, failed_count, error_text
+        FROM notification_logs
+        WHERE notification_rule_id = ?
+          AND rule_run_key = ?
+        LIMIT 1
+    """, (int(notification_rule_id), rule_run_key)).fetchone()
+
+
+def _mark_stale_notification_log(c, log_id):
+    c.execute("""
+        UPDATE notification_logs
+        SET status = ?, error_text = COALESCE(NULLIF(error_text, ''), ?)
+        WHERE id = ?
+          AND status IN (?, ?)
+    """, (
+        LOG_STATUS_FAILED_STALE,
+        "notification run became stale before completion; skipped to avoid duplicate sends",
+        int(log_id),
+        LOG_STATUS_PENDING,
+        LOG_STATUS_SENDING,
+    ))
 
 
 def _create_notification_log(title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
@@ -329,15 +370,39 @@ def _create_notification_log(title, message, target_type, target_date, notificat
                 target_date,
                 notification_rule_id=notification_rule_id,
                 rule_run_key=rule_run_key,
+                status=LOG_STATUS_SENDING,
             )
+            if log_id is None:
+                existing = _get_notification_log_by_run_key(c, notification_rule_id, rule_run_key)
+                existing_status = str(existing["status"] or "") if existing else ""
+                if existing and str(existing["status"] or "") in LOG_ACTIVE_STATUSES:
+                    cutoff = (now_jst() - timedelta(minutes=LOG_STALE_AFTER_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+                    if str(existing["created_at"] or "") < cutoff:
+                        _mark_stale_notification_log(c, existing["id"])
+                        existing_status = LOG_STATUS_FAILED_STALE
+                conn.commit()
+                return {
+                    "claimed": False,
+                    "log_id": int(existing["id"]) if existing else None,
+                    "status": existing_status,
+                    "skipped_reason": "notification run already claimed",
+                }
             conn.commit()
-            return log_id
+            return {"claimed": True, "log_id": log_id, "status": LOG_STATUS_SENDING, "skipped_reason": None}
         except Exception:
             conn.rollback()
             raise
 
 
-def _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text):
+def _notification_log_final_status(sent_count, failed_count):
+    if int(failed_count or 0) == 0:
+        return LOG_STATUS_SENT
+    if int(sent_count or 0) > 0:
+        return LOG_STATUS_PARTIAL_FAILED
+    return LOG_STATUS_FAILED
+
+
+def _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text, status):
     with get_conn() as conn:
         c = conn.cursor()
         try:
@@ -354,13 +419,32 @@ def _save_notification_results(log_id, recipients, delivery_results, sent_count,
                 ))
             c.execute("""
                 UPDATE notification_logs
-                SET sent_count = ?, failed_count = ?, error_text = ?
+                SET sent_count = ?, failed_count = ?, status = ?, error_text = ?
                 WHERE id = ?
-            """, (sent_count, failed_count, error_text, log_id))
+            """, (sent_count, failed_count, status, error_text, log_id))
             conn.commit()
         except Exception:
             conn.rollback()
             raise
+
+
+def _mark_notification_result_save_failed(log_id, sent_count, failed_count, error_text, save_error):
+    final_status = _notification_log_final_status(sent_count, failed_count)
+    combined_error = "\n".join(
+        value for value in (
+            error_text,
+            f"result save failed after LINE send: {save_error}",
+        )
+        if value
+    )
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE notification_logs
+            SET sent_count = ?, failed_count = ?, status = ?, error_text = ?
+            WHERE id = ?
+        """, (sent_count, failed_count, final_status, combined_error, int(log_id)))
+        conn.commit()
 
 
 def send_notification(
@@ -376,7 +460,7 @@ def send_notification(
 ):
     if recipients is None:
         recipients = get_recipients(recipient_target_type or target_type, target_date, user_ids)
-    log_id = _create_notification_log(
+    claim = _create_notification_log(
         title,
         message,
         target_type,
@@ -384,6 +468,18 @@ def send_notification(
         notification_rule_id=notification_rule_id,
         rule_run_key=rule_run_key,
     )
+    log_id = claim["log_id"]
+    if not claim["claimed"]:
+        return {
+            "log_id": log_id,
+            "target_count": len(recipients),
+            "sent_count": 0,
+            "failed_count": 0,
+            "error_text": None,
+            "status": claim["status"],
+            "skipped": True,
+            "skipped_reason": claim["skipped_reason"],
+        }
 
     sent_count = 0
     failed_count = 0
@@ -401,13 +497,24 @@ def send_notification(
         delivery_results.append({"status": status, "error": error})
 
     error_text = "\n".join(errors) if errors else None
-    _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text)
+    final_status = _notification_log_final_status(sent_count, failed_count)
+    try:
+        _save_notification_results(log_id, recipients, delivery_results, sent_count, failed_count, error_text, final_status)
+    except Exception as exc:
+        try:
+            _mark_notification_result_save_failed(log_id, sent_count, failed_count, error_text, exc)
+        except Exception:
+            pass
+        raise
     return {
         "log_id": log_id,
         "target_count": len(recipients),
         "sent_count": sent_count,
         "failed_count": failed_count,
         "error_text": error_text,
+        "status": final_status,
+        "skipped": False,
+        "skipped_reason": None,
     }
 
 
@@ -678,7 +785,7 @@ def get_notification_logs(limit: int = 20):
         c = conn.cursor()
         rows = c.execute("""
             SELECT id, title, message, target_type, target_date, sent_count, failed_count, error_text,
-                   notification_rule_id, rule_run_key, created_at
+                   notification_rule_id, rule_run_key, status, created_at
             FROM notification_logs
             ORDER BY id DESC
             LIMIT ?
@@ -745,8 +852,9 @@ def _has_rule_run_sent(rule_id: int, run_key: str):
             FROM notification_logs
             WHERE notification_rule_id = ?
               AND rule_run_key = ?
+              AND status IN (?, ?)
             LIMIT 1
-        """, (int(rule_id), run_key)).fetchone()
+        """, (int(rule_id), run_key, LOG_STATUS_SENT, LOG_STATUS_PARTIAL_FAILED)).fetchone()
         return row is not None
 
 
@@ -824,7 +932,7 @@ def _resolve_rule_target(rule, current):
     return "", target_type, []
 
 
-def run_due_notifications(current=None):
+def _run_due_notifications_legacy_unused(current=None):
     current = _normalize_current(current)
     if not _run_notifications_lock.acquire(blocking=False):
         return _cron_already_running_result(current)
@@ -883,6 +991,104 @@ def run_due_notifications(current=None):
                 recipients=recipients,
             )
             status = STATUS_SENT if int(result["failed_count"] or 0) == 0 else STATUS_FAILED
+            _update_rule_run_result(
+                rule["id"],
+                current,
+                status,
+                None,
+                target_count=result["target_count"],
+                sent_count=result["sent_count"],
+                failed_count=result["failed_count"],
+                mark_sent=True,
+            )
+            results.append({
+                **base,
+                **result,
+                "target_date": target_date,
+                "skipped_reason": None,
+            })
+
+        sent_rules = sum(1 for item in results if item["matched"] and item["skipped_reason"] is None)
+        skipped_rules = sum(1 for item in results if item["skipped_reason"])
+        return {
+            "ok": True,
+            "now": current.strftime("%Y-%m-%d %H:%M:%S"),
+            "timezone": TIMEZONE_NAME,
+            "checked_rules": len(rules),
+            "matched_rules": sum(1 for item in results if item["matched"]),
+            "sent_rules": sent_rules,
+            "sent_notifications": sum(int(item.get("sent_count") or 0) for item in results),
+            "skipped_rules": skipped_rules,
+            "results": results,
+        }
+    finally:
+        _run_notifications_lock.release()
+
+
+def run_due_notifications(current=None):
+    current = _normalize_current(current)
+    if not _run_notifications_lock.acquire(blocking=False):
+        return _cron_already_running_result(current)
+
+    try:
+        ensure_legacy_notification_rules_migrated()
+        rules = get_notification_rules()
+        results = []
+
+        for rule in rules:
+            matched, reason = _rule_match_status(rule, current)
+            base = {
+                "rule_id": rule["id"],
+                "name": rule["name"],
+                "matched": matched,
+                "target_count": 0,
+                "sent_count": 0,
+                "failed_count": 0,
+                "skipped_reason": reason,
+            }
+            if not matched:
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append(base)
+                continue
+
+            run_key = _rule_run_key(rule, current)
+            target_date, recipient_target_type, user_ids = _resolve_rule_target(rule, current)
+            if rule["target_type"] in {TARGET_UNSUBMITTED, TARGET_TOMORROW_ASSIGNED} and not target_date:
+                reason = "target date was not found"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append({**base, "target_date": target_date, "skipped_reason": reason})
+                continue
+
+            recipients = get_recipients(recipient_target_type, target_date, user_ids)
+            if not recipients:
+                reason = "no notification recipients"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason, target_count=0)
+                results.append({**base, "target_date": target_date, "skipped_reason": reason})
+                continue
+
+            result = send_notification(
+                rule.get("title") or rule["name"],
+                rule["message"],
+                f"rule:{rule['id']}",
+                target_date,
+                user_ids,
+                recipient_target_type=recipient_target_type,
+                notification_rule_id=rule["id"],
+                rule_run_key=run_key,
+                recipients=recipients,
+            )
+            if result.get("skipped"):
+                reason = result.get("skipped_reason") or "notification run already claimed"
+                _update_rule_run_result(rule["id"], current, STATUS_SKIPPED, reason)
+                results.append({
+                    **base,
+                    **result,
+                    "target_date": target_date,
+                    "skipped_reason": reason,
+                })
+                continue
+
+            status = STATUS_SENT if result.get("status") == LOG_STATUS_SENT else STATUS_FAILED
             _update_rule_run_result(
                 rule["id"],
                 current,

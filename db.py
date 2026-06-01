@@ -295,6 +295,34 @@ def _ensure_user_display_order(c):
         next_order += 1
 
 
+def _dedupe_notification_run_keys(c):
+    while True:
+        duplicate_groups = c.execute("""
+            SELECT notification_rule_id, rule_run_key
+            FROM notification_logs
+            WHERE notification_rule_id IS NOT NULL
+              AND rule_run_key IS NOT NULL
+              AND rule_run_key <> ''
+            GROUP BY notification_rule_id, rule_run_key
+            HAVING COUNT(*) > 1
+        """).fetchall()
+        if not duplicate_groups:
+            return
+        for group in duplicate_groups:
+            rows = c.execute("""
+                SELECT id, rule_run_key
+                FROM notification_logs
+                WHERE notification_rule_id = ?
+                  AND rule_run_key = ?
+                ORDER BY id
+            """, (group["notification_rule_id"], group["rule_run_key"])).fetchall()
+            for row in rows[1:]:
+                c.execute(
+                    "UPDATE notification_logs SET rule_run_key = ? WHERE id = ?",
+                    (f"{row['rule_run_key']}:duplicate:{row['id']}", row["id"]),
+                )
+
+
 def _init_sqlite_tables(c):
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -386,6 +414,7 @@ def _init_sqlite_tables(c):
             target_date TEXT,
             sent_count INTEGER DEFAULT 0,
             failed_count INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'sent',
             error_text TEXT,
             notification_rule_id INTEGER,
             rule_run_key TEXT,
@@ -397,6 +426,22 @@ def _init_sqlite_tables(c):
         c.execute("ALTER TABLE notification_logs ADD COLUMN notification_rule_id INTEGER")
     if "rule_run_key" not in notification_log_columns:
         c.execute("ALTER TABLE notification_logs ADD COLUMN rule_run_key TEXT")
+    if "status" not in notification_log_columns:
+        c.execute("ALTER TABLE notification_logs ADD COLUMN status TEXT NOT NULL DEFAULT 'sent'")
+    c.execute("""
+        UPDATE notification_logs
+        SET status = CASE
+            WHEN COALESCE(sent_count, 0) > 0 AND COALESCE(failed_count, 0) > 0 THEN 'partial_failed'
+            WHEN COALESCE(failed_count, 0) > 0 THEN 'failed'
+            ELSE 'sent'
+        END
+        WHERE status IS NULL OR status = ''
+    """)
+    _dedupe_notification_run_keys(c)
+    c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_logs_rule_run_key_unique
+        ON notification_logs(notification_rule_id, rule_run_key)
+    """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS notification_recipients (
@@ -535,6 +580,7 @@ def _init_postgres_tables(c):
             target_date TEXT,
             sent_count INTEGER DEFAULT 0,
             failed_count INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'sent',
             error_text TEXT,
             notification_rule_id INTEGER,
             rule_run_key TEXT,
@@ -543,6 +589,21 @@ def _init_postgres_tables(c):
     """)
     c.execute("ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS notification_rule_id INTEGER")
     c.execute("ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS rule_run_key TEXT")
+    c.execute("ALTER TABLE notification_logs ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'sent'")
+    c.execute("""
+        UPDATE notification_logs
+        SET status = CASE
+            WHEN COALESCE(sent_count, 0) > 0 AND COALESCE(failed_count, 0) > 0 THEN 'partial_failed'
+            WHEN COALESCE(failed_count, 0) > 0 THEN 'failed'
+            ELSE 'sent'
+        END
+        WHERE status IS NULL OR status = ''
+    """)
+    _dedupe_notification_run_keys(c)
+    c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_logs_rule_run_key_unique
+        ON notification_logs(notification_rule_id, rule_run_key)
+    """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS notification_recipients (
