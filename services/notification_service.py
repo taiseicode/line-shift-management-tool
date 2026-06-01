@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from db import get_conn, using_postgres
 from repositories.settings_repository import get_settings, upsert_setting
@@ -192,14 +192,33 @@ def get_notification_logs(limit: int = 20):
     conn = get_conn()
     try:
         c = conn.cursor()
-        return c.execute("""
+        rows = c.execute("""
             SELECT id, title, message, target_type, target_date, sent_count, failed_count, error_text, created_at
             FROM notification_logs
             ORDER BY id DESC
             LIMIT ?
         """, (int(limit),)).fetchall()
+        return [_format_notification_log(row) for row in rows]
     finally:
         conn.close()
+
+
+def _format_notification_log(row):
+    item = dict(row)
+    created_at = item.get("created_at")
+    if isinstance(created_at, datetime):
+        item["created_at_display"] = created_at.strftime("%Y-%m-%d %H:%M")
+        return item
+
+    text = str(created_at or "").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            item["created_at_display"] = datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M")
+            return item
+        except ValueError:
+            pass
+    item["created_at_display"] = text[:16] if len(text) >= 16 else text
+    return item
 
 
 def has_auto_notification_sent(target_type: str, target_date: str, run_date: str):

@@ -42,15 +42,16 @@
         <a href="#overview"><strong>1. 全体概要</strong><span>提出シフトと確定シフトの考え方</span></a>
         <a href="#staff"><strong>2. 従業員側の使い方</strong><span>LINEで提出・確認する流れ</span></a>
         <a href="#admin-basic"><strong>3. 管理者画面の基本</strong><span>ホームとサイドバー</span></a>
-        <a href="#users"><strong>4. 登録ユーザー一覧</strong><span>スタッフ確認・表示順・無効化</span></a>
-        <a href="#deadline"><strong>5. シフト提出期限</strong><span>提出できる締切ルール</span></a>
-        <a href="#confirm"><strong>6. 確定シフト管理</strong><span>出勤・休み・未処理の決定</span></a>
-        <a href="#summary"><strong>7. 期間サマリ</strong><span>提出状況と確定状況</span></a>
-        <a href="#daily"><strong>8. 1日シフト表</strong><span>タイムライン確認</span></a>
-        <a href="#excel"><strong>9. Excel出力</strong><span>共有・確認用ファイル</span></a>
-        <a href="#cost"><strong>10. 人件費集計</strong><span>日別・月別の概算人件費</span></a>
-        <a href="#examples"><strong>11. よくある操作</strong><span>現場で使う定番操作</span></a>
-        <a href="#trouble"><strong>12. 注意点・困ったとき</strong><span>運用時の確認ポイント</span></a>
+        <a href="#notifications"><strong>4. 通知管理</strong><span>手動送信・自動通知・送信履歴</span></a>
+        <a href="#users"><strong>5. 登録ユーザー一覧</strong><span>スタッフ確認・表示順・無効化</span></a>
+        <a href="#deadline"><strong>6. シフト提出期限</strong><span>提出できる締切ルール</span></a>
+        <a href="#confirm"><strong>7. 確定シフト管理</strong><span>出勤・休み・未処理の決定</span></a>
+        <a href="#summary"><strong>8. 期間サマリ</strong><span>提出状況と確定状況</span></a>
+        <a href="#daily"><strong>9. 1日シフト表</strong><span>タイムライン確認</span></a>
+        <a href="#excel"><strong>10. Excel出力</strong><span>共有・確認用ファイル</span></a>
+        <a href="#cost"><strong>11. 人件費集計</strong><span>日別・月別の概算人件費</span></a>
+        <a href="#examples"><strong>12. よくある操作</strong><span>現場で使う定番操作</span></a>
+        <a href="#trouble"><strong>13. 注意点・困ったとき</strong><span>運用時の確認ポイント</span></a>
       </div>
     </section>
 
@@ -166,6 +167,7 @@
           <div class="operation"><strong>確定シフト管理</strong>提出内容を確認し、出勤・休みを確定します。</div>
           <div class="operation"><strong>1日シフト表</strong>1日の勤務予定をタイムラインで確認します。</div>
           <div class="operation"><strong>シフト提出期限</strong>従業員が提出できる締切ルールを設定します。</div>
+          <div class="operation"><strong>通知管理</strong>スタッフへLINE通知を送信し、自動通知や送信履歴を確認します。</div>
           <div class="operation"><strong>人件費集計</strong>日別・月別の概算人件費を確認します。</div>
           <div class="operation"><strong>登録ユーザー一覧</strong>スタッフの名前、表示順、有効状態を管理します。</div>
         </div>
@@ -174,6 +176,89 @@
       <div class="callout info">
         <strong>表示状態をリセット</strong>
         日付や並び順の表示を初期状態に戻したいときに使います。
+      </div>
+    </section>
+
+    <section class="page" id="notifications">
+      <p class="section-label">Notifications</p>
+      <h2>通知管理</h2>
+      <p class="lead">通知管理では、管理者からスタッフへLINE通知を送信できます。サイドバーの「通知管理」から利用できます。</p>
+
+      <div class="feature-box">
+        <h3>通知管理でできること</h3>
+        <ul>
+          <li>手動メッセージ送信</li>
+          <li>自動通知設定</li>
+          <li>送信履歴確認</li>
+        </ul>
+      </div>
+
+      <figure class="screen screen-wide">
+        <div class="screen-frame"><img class="manual-shot" src="images/admin_notifications.png" alt="通知管理画面"></div>
+        <figcaption>図：通知管理画面。管理者は通知管理画面から手動メッセージ送信、自動通知設定、送信履歴の確認を行うことができます。</figcaption>
+      </figure>
+
+      <h3>手動メッセージ送信</h3>
+      <p>管理者が任意のメッセージをスタッフへLINE送信できます。入力項目はタイトル、本文、対象者です。</p>
+      <div class="operation-list">
+        <div class="operation"><strong>全員</strong>LINE連携済みのスタッフ全員へ送信します。</div>
+        <div class="operation"><strong>未提出者</strong>対象日にシフトをまだ提出していないスタッフへ送信します。</div>
+        <div class="operation"><strong>出勤予定者</strong>対象日に確定シフトがあるスタッフへ送信します。</div>
+        <div class="operation"><strong>個別ユーザー</strong>ユーザー一覧から選択したスタッフへ送信します。</div>
+      </div>
+
+      <div class="steps">
+        <div class="step"><strong>通知管理を開きます</strong><span>管理画面サイドバーの「通知管理」を押します。</span></div>
+        <div class="step"><strong>タイトルを入力します</strong><span>送信履歴で見分けやすいタイトルを入力します。</span></div>
+        <div class="step"><strong>本文を入力します</strong><span>スタッフへ送るLINE通知本文を入力します。</span></div>
+        <div class="step"><strong>対象者を選択します</strong><span>送信対象を選ぶと対象人数が表示されます。</span></div>
+        <div class="step"><strong>送信します</strong><span>「送信」を押すと、送信後に成功件数と失敗件数が表示されます。</span></div>
+      </div>
+
+      <h3>自動通知設定</h3>
+      <p>シフト便ではスタッフへのリマインド通知を自動送信できます。</p>
+      <div class="grid-2">
+        <div class="concept">
+          <small>提出期限前日リマインド</small>
+          <strong>未提出者へ通知</strong>
+          <p>シフト提出期限が近づいた際に、未提出者へLINE通知を送信します。</p>
+          <pre>【シフト提出リマインド】
+
+シフト提出期限が近づいています。
+まだ提出していない方はシフト便から提出してください。</pre>
+        </div>
+        <div class="concept primary">
+          <small>確定シフト前日リマインド</small>
+          <strong>翌日の勤務予定者へ通知</strong>
+          <p>翌日に勤務予定のスタッフへLINE通知を送信します。</p>
+          <pre>【明日のシフト確認】
+
+明日は確定シフトがあります。
+シフト便で勤務時間を確認してください。</pre>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step"><strong>通知管理を開きます</strong><span>自動通知設定のカードを確認します。</span></div>
+        <div class="step"><strong>自動通知をONにします</strong><span>利用したいリマインドのスイッチをONにします。</span></div>
+        <div class="step"><strong>送信予定時刻を設定します</strong><span>通知を判定する時刻を入力します。</span></div>
+        <div class="step"><strong>保存します</strong><span>「保存」を押すと、設定した時刻に自動で対象スタッフへ通知が送信されます。</span></div>
+      </div>
+
+      <h3>送信履歴</h3>
+      <p>通知管理画面下部の送信履歴では、過去の通知送信結果を確認できます。</p>
+      <div class="operation-list">
+        <div class="operation"><strong>送信日時</strong>通知を送信した日時を確認できます。</div>
+        <div class="operation"><strong>タイトル</strong>送信した通知のタイトルを確認できます。</div>
+        <div class="operation"><strong>対象</strong>全員、未提出者、出勤予定者、個別ユーザーなどの対象を確認できます。</div>
+        <div class="operation"><strong>対象日</strong>未提出者や出勤予定者を選んだ場合の対象日を確認できます。</div>
+        <div class="operation"><strong>成功件数</strong>送信できた件数を確認できます。</div>
+        <div class="operation"><strong>失敗件数</strong>送信できなかった件数を確認できます。</div>
+      </div>
+
+      <div class="callout warn">
+        <strong>注意事項</strong>
+        LINE通知を受け取るにはスタッフがLINE連携済みである必要があります。LINE未連携ユーザーには通知できません。自動通知は設定がONの場合のみ送信され、同じ自動通知は重複送信されない仕組みになっています。
       </div>
     </section>
 
