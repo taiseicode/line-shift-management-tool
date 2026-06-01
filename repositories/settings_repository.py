@@ -38,16 +38,13 @@ def get_setting(key: str):
     found, value = _get_cached_setting(key)
     if found:
         return value
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("SELECT value FROM settings WHERE key=?", (key,))
         row = c.fetchone()
         value = row["value"] if row else None
         _set_cached_setting(key, value)
         return value
-    finally:
-        conn.close()
 
 
 def get_settings(keys):
@@ -69,8 +66,7 @@ def get_settings(keys):
     if not missing_keys:
         return result
 
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         placeholders = ", ".join(["?"] * len(missing_keys))
         rows = c.execute(
@@ -83,13 +79,10 @@ def get_settings(keys):
             result[key] = value
             _set_cached_setting(key, value)
         return result
-    finally:
-        conn.close()
 
 
 def upsert_setting(key: str, value: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO settings(key, value)
@@ -99,15 +92,11 @@ def upsert_setting(key: str, value: str):
         """, (key, value))
         conn.commit()
         _invalidate_setting_cache(key)
-    finally:
-        conn.close()
+
 
 def delete_setting(key: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("DELETE FROM settings WHERE key=?", (key,))
         conn.commit()
         _invalidate_setting_cache(key)
-    finally:
-        conn.close()

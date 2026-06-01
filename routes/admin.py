@@ -12,7 +12,6 @@ from openpyxl.styles import Alignment, Border, Side, PatternFill, Font
 from openpyxl.utils import get_column_letter
 
 from config import ADMIN_PASSWORD
-from db import get_conn
 from repositories.confirmed_shift_repository import (
     delete_confirmed_shift,
     get_confirmed_shift_by_id,

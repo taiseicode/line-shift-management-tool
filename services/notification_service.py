@@ -235,8 +235,7 @@ def get_recipients(target_type: str, target_date: str = "", user_ids=None):
     target_date = (target_date or "").strip()
     if target_type == TARGET_TOMORROW_ASSIGNED:
         target_type = TARGET_ASSIGNED
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if target_type == TARGET_ALL:
             rows = c.execute("""
@@ -293,8 +292,6 @@ def get_recipients(target_type: str, target_date: str = "", user_ids=None):
             return [_row_to_recipient(row) for row in rows]
 
         return []
-    finally:
-        conn.close()
 
 
 def _insert_notification_log(c, title, message, target_type, target_date, notification_rule_id=None, rule_run_key=None):
@@ -328,59 +325,57 @@ def send_notification(
     rule_run_key: str = None,
 ):
     recipients = get_recipients(recipient_target_type or target_type, target_date, user_ids)
-    conn = get_conn()
     sent_count = 0
     failed_count = 0
     errors = []
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
-        log_id = _insert_notification_log(
-            c,
-            title,
-            message,
-            target_type,
-            target_date,
-            notification_rule_id=notification_rule_id,
-            rule_run_key=rule_run_key,
-        )
-        for recipient in recipients:
-            ok, error = send_line_message(recipient["line_user_id"], message)
-            status = "sent" if ok else "failed"
-            if ok:
-                sent_count += 1
-            else:
-                failed_count += 1
-                if error:
-                    errors.append(f'{recipient["name"] or recipient["user_id"]}: {error}')
+        try:
+            log_id = _insert_notification_log(
+                c,
+                title,
+                message,
+                target_type,
+                target_date,
+                notification_rule_id=notification_rule_id,
+                rule_run_key=rule_run_key,
+            )
+            for recipient in recipients:
+                ok, error = send_line_message(recipient["line_user_id"], message)
+                status = "sent" if ok else "failed"
+                if ok:
+                    sent_count += 1
+                else:
+                    failed_count += 1
+                    if error:
+                        errors.append(f'{recipient["name"] or recipient["user_id"]}: {error}')
+                c.execute("""
+                    INSERT INTO notification_recipients(notification_log_id, user_id, line_user_id, status, error_text)
+                    VALUES(?, ?, ?, ?, ?)
+                """, (
+                    log_id,
+                    recipient["user_id"],
+                    recipient["line_user_id"],
+                    status,
+                    error,
+                ))
+            error_text = "\n".join(errors) if errors else None
             c.execute("""
-                INSERT INTO notification_recipients(notification_log_id, user_id, line_user_id, status, error_text)
-                VALUES(?, ?, ?, ?, ?)
-            """, (
-                log_id,
-                recipient["user_id"],
-                recipient["line_user_id"],
-                status,
-                error,
-            ))
-        error_text = "\n".join(errors) if errors else None
-        c.execute("""
-            UPDATE notification_logs
-            SET sent_count = ?, failed_count = ?, error_text = ?
-            WHERE id = ?
-        """, (sent_count, failed_count, error_text, log_id))
-        conn.commit()
-        return {
-            "log_id": log_id,
-            "target_count": len(recipients),
-            "sent_count": sent_count,
-            "failed_count": failed_count,
-            "error_text": error_text,
-        }
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+                UPDATE notification_logs
+                SET sent_count = ?, failed_count = ?, error_text = ?
+                WHERE id = ?
+            """, (sent_count, failed_count, error_text, log_id))
+            conn.commit()
+            return {
+                "log_id": log_id,
+                "target_count": len(recipients),
+                "sent_count": sent_count,
+                "failed_count": failed_count,
+                "error_text": error_text,
+            }
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def _legacy_rule_exists(c, name):
@@ -398,8 +393,7 @@ def ensure_legacy_notification_rules_migrated():
         return
 
     now_text = now_jst().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if (
             values.get(NOTIFY_DEADLINE_ENABLED_KEY) is not None or
@@ -448,18 +442,12 @@ def ensure_legacy_notification_rules_migrated():
                 now_text,
             ))
         conn.commit()
-        upsert_setting(LEGACY_RULES_MIGRATED_KEY, "1")
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    upsert_setting(LEGACY_RULES_MIGRATED_KEY, "1")
 
 
 def get_notification_rules():
     ensure_legacy_notification_rules_migrated()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         rows = c.execute("""
             SELECT *
@@ -467,19 +455,14 @@ def get_notification_rules():
             ORDER BY enabled DESC, id DESC
         """).fetchall()
         return [_format_rule(row) for row in rows]
-    finally:
-        conn.close()
 
 
 def get_notification_rule(rule_id: int):
     ensure_legacy_notification_rules_migrated()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         row = c.execute("SELECT * FROM notification_rules WHERE id = ?", (int(rule_id),)).fetchone()
         return _format_rule(row) if row else None
-    finally:
-        conn.close()
 
 
 def _validate_rule_payload(data):
@@ -543,8 +526,7 @@ def save_notification_rule(data, rule_id=None):
     ensure_legacy_notification_rules_migrated()
     values = _validate_rule_payload(data)
     now_text = now_jst().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if rule_id:
             c.execute("""
@@ -619,16 +601,10 @@ def save_notification_rule(data, rule_id=None):
             saved_id = int(c.lastrowid)
         conn.commit()
         return saved_id
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 
 def set_notification_rule_enabled(rule_id: int, enabled: bool):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             UPDATE notification_rules
@@ -638,25 +614,19 @@ def set_notification_rule_enabled(rule_id: int, enabled: bool):
         updated = c.rowcount
         conn.commit()
         return updated
-    finally:
-        conn.close()
 
 
 def delete_notification_rule(rule_id: int):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("DELETE FROM notification_rules WHERE id = ?", (int(rule_id),))
         deleted = c.rowcount
         conn.commit()
         return deleted
-    finally:
-        conn.close()
 
 
 def get_notification_logs(limit: int = 20):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         rows = c.execute("""
             SELECT id, title, message, target_type, target_date, sent_count, failed_count, error_text,
@@ -666,8 +636,6 @@ def get_notification_logs(limit: int = 20):
             LIMIT ?
         """, (int(limit),)).fetchall()
         return [_format_notification_log(row) for row in rows]
-    finally:
-        conn.close()
 
 
 def _format_notification_log(row):
@@ -722,8 +690,7 @@ def _rule_run_key(rule, current):
 
 
 def _has_rule_run_sent(rule_id: int, run_key: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         row = c.execute("""
             SELECT id
@@ -733,13 +700,10 @@ def _has_rule_run_sent(rule_id: int, run_key: str):
             LIMIT 1
         """, (int(rule_id), run_key)).fetchone()
         return row is not None
-    finally:
-        conn.close()
 
 
 def _update_rule_last_sent(rule_id: int, sent_at):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             UPDATE notification_rules
@@ -751,14 +715,11 @@ def _update_rule_last_sent(rule_id: int, sent_at):
             int(rule_id),
         ))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def _update_rule_run_result(rule_id: int, current, status: str, skip_reason: str = None, target_count: int = 0, sent_count: int = 0, failed_count: int = 0, mark_sent: bool = False):
     checked_at = current.strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if mark_sent:
             c.execute("""
@@ -794,8 +755,6 @@ def _update_rule_run_result(rule_id: int, current, status: str, skip_reason: str
                 int(rule_id),
             ))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def _resolve_rule_target(rule, current):

@@ -5,8 +5,7 @@ from db import get_conn
 
 def upsert_required_staff(date_str: str, required_count: int):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO required_staff(date, required_count, updated_at)
@@ -16,12 +15,10 @@ def upsert_required_staff(date_str: str, required_count: int):
               updated_at=excluded.updated_at
         """, (date_str, int(required_count), now))
         conn.commit()
-    finally:
-        conn.close()
+
 
 def get_required_staff_range(start_ymd: str, end_ymd: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT date, required_count, updated_at
@@ -31,5 +28,3 @@ def get_required_staff_range(start_ymd: str, end_ymd: str):
         """, (start_ymd, end_ymd))
         rows = c.fetchall()
         return {r["date"]: int(r["required_count"]) for r in rows}
-    finally:
-        conn.close()

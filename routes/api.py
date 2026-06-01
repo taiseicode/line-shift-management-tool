@@ -60,8 +60,7 @@ def _get_my_confirmed_decisions(user_id: int, start_ymd: str, end_ymd: str):
         ORDER BY cs.date
     """
     params = (int(user_id), start_ymd, end_ymd)
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute(sql, params)
         rows = [_row_to_dict(row) for row in c.fetchall()]
@@ -73,8 +72,6 @@ def _get_my_confirmed_decisions(user_id: int, start_ymd: str, end_ymd: str):
             "rows": rows,
             "count": len(rows),
         }
-    finally:
-        conn.close()
 
 
 def _get_my_confirmed_decisions_all(user_id: int):
@@ -96,8 +93,7 @@ def _get_my_confirmed_decisions_all(user_id: int):
         ORDER BY cs.date
     """
     params = (int(user_id),)
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute(sql, params)
         rows = [_row_to_dict(row) for row in c.fetchall()]
@@ -107,8 +103,6 @@ def _get_my_confirmed_decisions_all(user_id: int):
             "rows": rows,
             "count": len(rows),
         }
-    finally:
-        conn.close()
 
 
 def _confirmed_decision_to_item(decision):
@@ -137,8 +131,7 @@ def _is_confirmed_decision(decision):
 
 
 def _ensure_user_pay_settings_table():
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if using_postgres():
             c.execute("""
@@ -203,8 +196,6 @@ def _ensure_user_pay_settings_table():
         c.execute("UPDATE user_pay_settings SET created_at = ? WHERE created_at IS NULL OR created_at = ''", (now,))
         c.execute("UPDATE user_pay_settings SET updated_at = ? WHERE updated_at IS NULL OR updated_at = ''", (now,))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def _get_verified_user_from_headers():
@@ -238,6 +229,7 @@ def _get_verified_user_from_headers():
         upsert_user(line_user_id, (claims.get("name") or "未設定").strip() or "未設定")
         user = get_user_by_line_id(line_user_id)
     return user, claims, None
+
 
 def _default_pay_settings():
     return {
@@ -284,44 +276,35 @@ def _pay_settings_to_dict(row, user_id=None):
 
 def _pay_settings_found(user_id: int):
     _ensure_user_pay_settings_table()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         row = c.execute(
             "SELECT 1 FROM user_pay_settings WHERE user_id = ? LIMIT 1",
             (int(user_id),),
         ).fetchone()
         return row is not None
-    finally:
-        conn.close()
 
 
 def _get_pay_settings(user_id: int):
     _ensure_user_pay_settings_table()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         row = c.execute(
             "SELECT user_id, hourly_wage, break_rule, night_enabled, overtime_enabled FROM user_pay_settings WHERE user_id = ?",
             (int(user_id),),
         ).fetchone()
         return _pay_settings_to_dict(row, user_id)
-    finally:
-        conn.close()
 
 
 def _get_pay_settings_row(user_id: int):
     _ensure_user_pay_settings_table()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         row = c.execute(
             "SELECT user_id, hourly_wage, break_rule, night_enabled, overtime_enabled FROM user_pay_settings WHERE user_id = ?",
             (int(user_id),),
         ).fetchone()
         return _row_to_dict(row) if row else None
-    finally:
-        conn.close()
 
 
 def _pay_settings_debug(line_user_id: str, user, saved_row=None):
@@ -419,20 +402,16 @@ def _count_confirmed_by_line_user_id(line_user_id: str, confirmed_columns):
             JOIN users u ON u.id = cs.user_id
             WHERE u.line_user_id = ?
         """
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute(sql, (line_user_id,))
         row = c.fetchone()
         return int(row["count"] or 0) if row else 0
-    finally:
-        conn.close()
 
 
 def _build_confirmed_debug_details(line_user_id: str, user, confirmed_columns):
     resolved_user_id = int(user["id"]) if user else None
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         total_row = c.execute("SELECT COUNT(*) AS count FROM confirmed_shifts").fetchone()
         count_for_user_id = 0
@@ -475,8 +454,6 @@ def _build_confirmed_debug_details(line_user_id: str, user, confirmed_columns):
             "confirmed_count_for_line_user_id": int(line_count_row["count"] or 0) if line_count_row else 0,
             "confirmed_sample_rows": sample_rows,
         }
-    finally:
-        conn.close()
 
 
 def _build_my_confirmed_shift_payload(line_user_id: str, user, start_d, end_d, entries=None):
@@ -597,8 +574,7 @@ def _build_my_confirmed_shift_payload(line_user_id: str, user, start_d, end_d, e
 
 
 def _is_user_shift_confirmed(user_id: int, date_str: str) -> bool:
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT 1
@@ -608,8 +584,6 @@ def _is_user_shift_confirmed(user_id: int, date_str: str) -> bool:
             LIMIT 1
         """, (user_id, date_str))
         return c.fetchone() is not None
-    finally:
-        conn.close()
 
 
 def _reject_if_user_shift_confirmed(user, date_str: str):
@@ -766,8 +740,7 @@ def api_my_pay_settings():
     night_enabled = 1 if _to_bool_flag(data.get("night_enabled")) else 0
     overtime_enabled = 1 if _to_bool_flag(data.get("overtime_enabled")) else 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO user_pay_settings(user_id, hourly_wage, break_rule, night_enabled, overtime_enabled, created_at, updated_at)
@@ -780,8 +753,6 @@ def api_my_pay_settings():
               updated_at=excluded.updated_at
         """, (user_id, hourly_wage, break_rule, night_enabled, overtime_enabled, now, now))
         conn.commit()
-    finally:
-        conn.close()
 
     saved_row = _get_pay_settings_row(user_id)
     settings = _pay_settings_to_dict(saved_row, user_id)
@@ -808,10 +779,9 @@ def api_my_pay_summary():
 
     settings_found = _pay_settings_found(int(user["id"]))
     settings = _get_pay_settings(int(user["id"]))
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
-        rows = [
+        confirmed_rows = [
             _row_to_dict(row)
             for row in c.execute("""
                 SELECT id, user_id, date, start_time, end_time
@@ -825,16 +795,14 @@ def api_my_pay_summary():
                 ORDER BY date
             """, (int(user["id"]), to_ymd(month_start), to_ymd(month_end))).fetchall()
         ]
-    finally:
-        conn.close()
 
     total_scheduled_minutes = 0
     break_minutes = 0
     paid_work_minutes = 0
     overtime_minutes = 0
     night_minutes = 0
-    for row in rows:
-        calculated = _calculate_shift_pay_minutes(row, settings)
+    for confirmed_row in confirmed_rows:
+        calculated = _calculate_shift_pay_minutes(confirmed_row, settings)
         if not calculated:
             continue
         total_scheduled_minutes += calculated["scheduled_minutes"]
@@ -856,7 +824,7 @@ def api_my_pay_summary():
         "ok": True,
         "month": month,
         "hourly_wage": hourly_wage,
-        "confirmed_shift_count": len(rows),
+        "confirmed_shift_count": len(confirmed_rows),
         "total_scheduled_minutes": total_scheduled_minutes,
         "break_minutes": break_minutes,
         "paid_work_minutes": paid_work_minutes,
@@ -877,8 +845,8 @@ def api_my_pay_summary():
             "month": month,
             "month_start": to_ymd(month_start),
             "month_end": to_ymd(month_end),
-            "confirmed_shift_count": len(rows),
-            "sample_confirmed_rows": rows[:5],
+            "confirmed_shift_count": len(confirmed_rows),
+            "sample_confirmed_rows": confirmed_rows[:5],
             "hourly_wage": hourly_wage,
             "settings_found": settings_found,
         }
@@ -953,6 +921,7 @@ def api_save_day():
         "entry": entry,
         "deadline_status": build_deadline_status_payload(shift_date_obj) if shift_date_obj else None
     })
+
 
 @api_bp.route("/api/delete_day", methods=["POST"])
 def api_delete_day():

@@ -15,8 +15,7 @@ def ensure_user_display_order():
     with _display_order_lock:
         if _display_order_checked:
             return
-        conn = get_conn()
-        try:
+        with get_conn() as conn:
             c = conn.cursor()
             columns = get_table_columns_with_cursor(c, "users")
             if "display_order" not in columns:
@@ -35,24 +34,19 @@ def ensure_user_display_order():
                 next_order += 1
             conn.commit()
             _display_order_checked = True
-        finally:
-            conn.close()
 
 
 def get_user_by_line_id(line_user_id: str):
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("SELECT * FROM users WHERE line_user_id=?", (line_user_id,))
         return c.fetchone()
-    finally:
-        conn.close()
+
 
 def get_all_users(include_inactive: bool = True):
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if include_inactive:
             c.execute(f"""
@@ -68,13 +62,11 @@ def get_all_users(include_inactive: bool = True):
                 ORDER BY {USER_ORDER_BY}
             """)
         return c.fetchall()
-    finally:
-        conn.close()
+
 
 def upsert_user(line_user_id: str, name: str):
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         next_order_row = c.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
         next_order = int(next_order_row["next_order"] or 1)
@@ -86,13 +78,11 @@ def upsert_user(line_user_id: str, name: str):
         c.execute("UPDATE users SET name=? WHERE line_user_id=?", (name, line_user_id))
         c.execute("UPDATE users SET display_order=? WHERE line_user_id=? AND display_order IS NULL", (next_order, line_user_id))
         conn.commit()
-    finally:
-        conn.close()
+
 
 def set_user_active(user_id: int, active: int) -> int:
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if int(active) == 1:
             next_order_row = c.execute("SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM users").fetchone()
@@ -102,26 +92,21 @@ def set_user_active(user_id: int, active: int) -> int:
         updated = c.rowcount
         conn.commit()
         return updated
-    finally:
-        conn.close()
+
 
 def update_user_name(user_id: int, name: str) -> int:
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("UPDATE users SET name=? WHERE id=?", (name, int(user_id)))
         updated = c.rowcount
         conn.commit()
         return updated
-    finally:
-        conn.close()
 
 
 def move_active_user(user_id: int, direction: str) -> bool:
     ensure_user_display_order()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         rows = c.execute(f"""
             SELECT id, display_order
@@ -143,5 +128,3 @@ def move_active_user(user_id: int, direction: str) -> bool:
         c.execute("UPDATE users SET display_order=? WHERE id=?", (current["display_order"], target["id"]))
         conn.commit()
         return True
-    finally:
-        conn.close()

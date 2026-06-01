@@ -33,13 +33,10 @@ def calculate_staff_summary_from_rows(start_d: date, end_d: date, rows, active_u
         }
 
     if active_user_count is None:
-        conn = get_conn()
-        try:
+        with get_conn() as conn:
             c = conn.cursor()
             c.execute("SELECT COUNT(*) AS cnt FROM users WHERE active=1")
             total_users = int(c.fetchone()["cnt"])
-        finally:
-            conn.close()
     else:
         total_users = int(active_user_count)
 

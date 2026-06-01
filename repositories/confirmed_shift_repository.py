@@ -8,19 +8,15 @@ USER_ORDER_SQL = "COALESCE(u.display_order, 999999), u.id"
 def _empty_time_value_for_confirmed_shifts():
     if using_postgres():
         return None
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         columns = c.execute("PRAGMA table_info(confirmed_shifts)").fetchall()
         notnull = {row["name"]: int(row["notnull"] or 0) for row in columns}
         return "" if notnull.get("start_time") or notnull.get("end_time") else None
-    finally:
-        conn.close()
 
 
 def get_confirmed_shifts_by_date(date_str: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cs.id, cs.user_id, cs.date, cs.is_assigned, cs.source_entry_id,
@@ -34,13 +30,10 @@ def get_confirmed_shifts_by_date(date_str: str):
             ORDER BY COALESCE(u.display_order, 999999), u.id
         """, (date_str,))
         return c.fetchall()
-    finally:
-        conn.close()
 
 
 def get_confirmed_shift_by_id(confirmed_shift_id: int):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cs.id, cs.user_id, cs.date, cs.start_time, cs.end_time, cs.is_assigned, cs.source_entry_id,
@@ -50,13 +43,10 @@ def get_confirmed_shift_by_id(confirmed_shift_id: int):
             WHERE cs.id = ?
         """, (confirmed_shift_id,))
         return c.fetchone()
-    finally:
-        conn.close()
 
 
 def get_confirmed_shift_decisions_range(start_ymd: str, end_ymd: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cs.id, cs.user_id, cs.date, cs.start_time, cs.end_time, cs.is_assigned, cs.source_entry_id,
@@ -67,13 +57,10 @@ def get_confirmed_shift_decisions_range(start_ymd: str, end_ymd: str):
             ORDER BY cs.date, COALESCE(u.display_order, 999999), u.id
         """, (start_ymd, end_ymd))
         return c.fetchall()
-    finally:
-        conn.close()
 
 
 def get_confirmed_shift_decisions_by_date(date_str: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cs.id, cs.user_id, cs.date, cs.start_time, cs.end_time, cs.is_assigned, cs.source_entry_id,
@@ -84,13 +71,10 @@ def get_confirmed_shift_decisions_by_date(date_str: str):
             ORDER BY COALESCE(u.display_order, 999999), u.id
         """, (date_str,))
         return c.fetchall()
-    finally:
-        conn.close()
 
 
 def get_confirmed_shifts_range(start_ymd: str, end_ymd: str):
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             SELECT cs.id, cs.user_id, cs.date,
@@ -105,8 +89,6 @@ def get_confirmed_shifts_range(start_ymd: str, end_ymd: str):
             ORDER BY cs.date, COALESCE(u.display_order, 999999), u.id
         """, (start_ymd, end_ymd))
         return c.fetchall()
-    finally:
-        conn.close()
 
 
 def upsert_confirmed_shift(
@@ -122,8 +104,7 @@ def upsert_confirmed_shift(
         start_time = empty_time
         end_time = empty_time
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("""
             INSERT INTO confirmed_shifts(user_id, date, start_time, end_time, is_assigned, source_entry_id, created_at, updated_at)
@@ -136,15 +117,12 @@ def upsert_confirmed_shift(
               updated_at=excluded.updated_at
         """, (user_id, date_str, start_time, end_time, int(is_assigned), source_entry_id, now, now))
         conn.commit()
-    finally:
-        conn.close()
 
 
 def save_confirmed_shift_decisions_bulk(decisions):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     empty_time_value = _empty_time_value_for_confirmed_shifts()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         for decision in decisions:
             if decision["status"] == "unconfirmed":
@@ -179,20 +157,12 @@ def save_confirmed_shift_decisions_bulk(decisions):
                 now,
             ))
         conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 
 def delete_confirmed_shift(confirmed_shift_id: int) -> int:
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         c.execute("DELETE FROM confirmed_shifts WHERE id=?", (confirmed_shift_id,))
         deleted = c.rowcount
         conn.commit()
         return deleted
-    finally:
-        conn.close()

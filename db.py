@@ -144,6 +144,47 @@ class PooledConnection:
             pass
 
 
+class SQLiteConnection:
+    def __init__(self, conn):
+        self._conn = conn
+        self._closed = False
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        if self._closed:
+            return
+        self._conn.close()
+        self._closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type:
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
 def _get_postgres_pool():
     global _postgres_pool
     if _postgres_pool is not None:
@@ -175,7 +216,7 @@ def get_conn():
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    return SQLiteConnection(conn)
 
 
 def get_table_columns(table_name: str):
@@ -183,8 +224,7 @@ def get_table_columns(table_name: str):
     with _table_columns_cache_lock:
         if cache_key in _table_columns_cache:
             return list(_table_columns_cache[cache_key])
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if USE_POSTGRES:
             rows = c.execute(
@@ -203,8 +243,6 @@ def get_table_columns(table_name: str):
         with _table_columns_cache_lock:
             _table_columns_cache[cache_key] = tuple(columns)
         return columns
-    finally:
-        conn.close()
 
 
 def invalidate_table_columns_cache(table_name: str = None):
@@ -553,14 +591,11 @@ def _init_postgres_tables(c):
 
 def init_tables():
     invalidate_table_columns_cache()
-    conn = get_conn()
-    try:
+    with get_conn() as conn:
         c = conn.cursor()
         if USE_POSTGRES:
             _init_postgres_tables(c)
         else:
             _init_sqlite_tables(c)
         conn.commit()
-    finally:
-        conn.close()
     invalidate_table_columns_cache()
