@@ -419,6 +419,7 @@
           <a class="nav-link {% if active_nav == 'confirm' %}active{% endif %}" id="adminConfirmNavLink" href="/admin/confirm?start={{ start_value }}&end={{ end_value }}&confirm_date={{ confirm_date_value }}&sort={{ confirm_sort|default('display') }}">確定シフト管理</a>
           <a class="nav-link {% if active_nav == 'daily_shift' %}active{% endif %}" id="adminDailyShiftNavLink" href="/admin/daily-shift?target_date={{ confirm_date_value }}">1日シフト表</a>
           <a class="nav-link {% if active_nav == 'deadline' %}active{% endif %}" id="adminDeadlineNavLink" href="/admin/deadline?start={{ start_value }}&end={{ end_value }}">シフト提出期限</a>
+          <a class="nav-link {% if active_nav == 'notifications' %}active{% endif %}" id="adminNotificationsNavLink" href="/admin/notifications?target_date={{ confirm_date_value }}">通知管理</a>
           <a class="nav-link {% if active_nav == 'cost' %}active{% endif %}" id="adminCostNavLink" href="/admin/cost?start={{ start_value }}&end={{ end_value }}">人件費集計</a>
           <a class="nav-link {% if active_nav == 'users' %}active{% endif %}" id="adminUsersNavLink" href="/admin/users?start={{ start_value }}&end={{ end_value }}">登録ユーザー一覧</a>
           <a class="nav-link {% if active_nav == 'manual' %}active{% endif %}" id="adminManualNavLink" href="/admin/manual">使い方</a>

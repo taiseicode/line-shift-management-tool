@@ -9,6 +9,7 @@ from db import init_tables
 from routes.admin import admin_bp
 from routes.api import api_bp
 from routes.liff import liff_bp
+from routes.notifications import notifications_bp
 from routes.webhook import webhook_bp
 from services.auth_service import validate_runtime_security
 
@@ -18,6 +19,7 @@ ADMIN_TIMING_PATHS = {
     "/admin/confirm",
     "/admin/cost",
     "/admin/deadline",
+    "/admin/notifications",
     "/admin/users",
     "/admin/manual",
 }
@@ -66,6 +68,7 @@ def create_app():
     init_tables()
 
     app.register_blueprint(admin_bp)
+    app.register_blueprint(notifications_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(liff_bp)
     app.register_blueprint(webhook_bp)

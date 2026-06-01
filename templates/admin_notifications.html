@@ -1,0 +1,182 @@
+{% extends "admin_base.html" %}
+
+{% block title %}通知管理{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+  <div class="card-body">
+    <h1 class="mb-1">通知管理</h1>
+    <div class="muted-note">LINE Messaging API でスタッフへ通知を送信します。</div>
+  </div>
+</div>
+
+{% if status %}
+<div class="alert alert-success py-2">{{ status }}</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger py-2">{{ error }}</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-xl-7">
+    <div class="page-card card mb-3">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h2 class="h5 mb-1">手動メッセージ送信</h2>
+            <div class="muted-note">line_user_id が登録されているユーザーだけに送信します。</div>
+          </div>
+          <span class="badge text-bg-secondary" id="recipientCountBadge">対象 0 件</span>
+        </div>
+
+        <form method="POST" action="/admin/notifications/send" id="notificationSendForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+          <div class="mb-3">
+            <label class="form-label" for="title">タイトル</label>
+            <input class="form-control" id="title" name="title" maxlength="120" placeholder="例: シフト提出のお願い">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="message">本文</label>
+            <textarea class="form-control" id="message" name="message" rows="6" required placeholder="送信する本文を入力"></textarea>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="targetType">対象者</label>
+              <select class="form-select" id="targetType" name="target_type">
+                <option value="all">全員</option>
+                <option value="unsubmitted">未提出者</option>
+                <option value="assigned">出勤予定者</option>
+                <option value="individual">個別ユーザー</option>
+              </select>
+            </div>
+            <div class="col-md-6" id="targetDateWrap">
+              <label class="form-label" for="targetDate">対象日</label>
+              <input class="form-control" id="targetDate" name="target_date" type="date" value="{{ target_date_value }}">
+            </div>
+          </div>
+          <div class="mt-3 d-none" id="individualUsersWrap">
+            <label class="form-label" for="userIds">個別ユーザー</label>
+            <select class="form-select" id="userIds" name="user_ids" multiple size="8">
+              {% for user in users %}
+              <option value="{{ user['id'] }}">{{ user['name'] or ('ID ' ~ user['id']) }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl または Shift キーで複数選択できます。</div>
+          </div>
+          <div class="d-flex justify-content-end mt-3">
+            <button type="submit" class="btn btn-primary">送信</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="page-card card mb-3">
+      <div class="card-body">
+        <h2 class="h5 mb-3">自動通知設定</h2>
+        <form method="POST" action="/admin/notifications/settings">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+          <div class="border rounded-3 p-3 mb-3">
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="deadlineEnabled" name="deadline_enabled" value="1" {% if settings.deadline_enabled %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="deadlineEnabled">提出期限前日リマインド</label>
+            </div>
+            <label class="form-label" for="deadlineTime">送信判定時刻</label>
+            <input class="form-control" id="deadlineTime" name="deadline_time" type="time" value="{{ settings.deadline_time }}">
+          </div>
+
+          <div class="border rounded-3 p-3 mb-3">
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="confirmedEnabled" name="confirmed_enabled" value="1" {% if settings.confirmed_enabled %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="confirmedEnabled">確定シフト前日リマインド</label>
+            </div>
+            <label class="form-label" for="confirmedTime">送信判定時刻</label>
+            <input class="form-control" id="confirmedTime" name="confirmed_time" type="time" value="{{ settings.confirmed_time }}">
+          </div>
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-card card">
+  <div class="card-body">
+    <h2 class="h5 mb-3">送信履歴</h2>
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>日時</th>
+            <th>タイトル</th>
+            <th>対象</th>
+            <th>対象日</th>
+            <th>成功</th>
+            <th>失敗</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td>{{ log['created_at'] }}</td>
+            <td>{{ log['title'] or '（無題）' }}</td>
+            <td>{{ log['target_type'] }}</td>
+            <td>{{ log['target_date'] or '' }}</td>
+            <td><span class="badge text-bg-success">{{ log['sent_count'] }}</span></td>
+            <td><span class="badge {% if log['failed_count'] %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ log['failed_count'] }}</span></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">送信履歴はまだありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const targetType = document.getElementById("targetType");
+  const targetDate = document.getElementById("targetDate");
+  const targetDateWrap = document.getElementById("targetDateWrap");
+  const usersWrap = document.getElementById("individualUsersWrap");
+  const userIds = document.getElementById("userIds");
+  const countBadge = document.getElementById("recipientCountBadge");
+
+  function selectedUserIds() {
+    return Array.from(userIds.selectedOptions || []).map((option) => option.value);
+  }
+
+  function syncTargetControls() {
+    const value = targetType.value;
+    usersWrap.classList.toggle("d-none", value !== "individual");
+    targetDateWrap.classList.toggle("d-none", value === "all" || value === "individual");
+    refreshRecipientCount();
+  }
+
+  async function refreshRecipientCount() {
+    const params = new URLSearchParams();
+    params.set("target_type", targetType.value);
+    if (targetDate.value) params.set("target_date", targetDate.value);
+    selectedUserIds().forEach((id) => params.append("user_ids", id));
+    try {
+      const response = await fetch(`/admin/notifications/preview-count?${params.toString()}`);
+      const data = await response.json();
+      countBadge.textContent = `対象 ${data.count || 0} 件`;
+    } catch (e) {
+      countBadge.textContent = "対象 - 件";
+    }
+  }
+
+  targetType.addEventListener("change", syncTargetControls);
+  targetDate.addEventListener("change", refreshRecipientCount);
+  userIds.addEventListener("change", refreshRecipientCount);
+  document.addEventListener("DOMContentLoaded", syncTargetControls);
+</script>
+{% endblock %}
