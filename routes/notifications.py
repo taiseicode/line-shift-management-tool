@@ -1,7 +1,7 @@
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from flask import Blueprint, jsonify, make_response, redirect, render_template, request, session
+from flask import Blueprint, current_app, jsonify, make_response, redirect, render_template, request, session
 
 from config import CRON_SECRET, DEBUG_MODE, FLASK_ENV
 from repositories.user_repository import get_all_users
@@ -225,5 +225,10 @@ def internal_run_notifications():
     try:
         result = run_due_notifications()
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        current_app.logger.exception("run_notifications failed")
+        return jsonify({
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc)[:500],
+        }), 500
     return jsonify(result)
