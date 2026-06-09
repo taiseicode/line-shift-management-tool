@@ -1029,11 +1029,11 @@ function currentMonthValue() {{
 }}
 
 function normalizeMonthValue(monthValue) {{
-  return /^\d{{4}}-\d{{2}}$/.test(String(monthValue || "")) ? monthValue : currentMonthValue();
+  return /^\\d{{4}}-\\d{{2}}$/.test(String(monthValue || "")) ? monthValue : currentMonthValue();
 }}
 
 function shiftMonth(monthValue, diffMonths) {{
-  const m = /^(\d{{4}})-(\d{{2}})$/.exec(normalizeMonthValue(monthValue));
+  const m = /^(\\d{{4}})-(\\d{{2}})$/.exec(normalizeMonthValue(monthValue));
   if (!m) return currentMonthValue();
   const d = new Date(Number(m[1]), Number(m[2]) - 1 + Number(diffMonths || 0), 1);
   return `${{d.getFullYear()}}-${{pad2(d.getMonth() + 1)}}`;
